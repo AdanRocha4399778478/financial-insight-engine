@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { counterpartyFromDescription, historyKey } from "./classify";
+import {
+  counterpartyFromDescription,
+  historyKey,
+  movementDirectionFromDescription,
+} from "./classify";
 import { bandronesCategoryMapping, parseBandronesTrainingRows } from "./bandrones-training";
 import { prepareTrainingBatch } from "./training-import";
 
@@ -39,18 +43,40 @@ describe("Bandrones training adapter", () => {
     expect(
       counterpartyFromDescription("PIX QR CODE DINAMICO DES: AUTO POSTO AVIADOR LT 12/05"),
     ).toBe("AUTO POSTO AVIADOR LT");
+    expect(
+      counterpartyFromDescription("PIX QR CODE ESTATICO DES: SO LUZ MATERIAIS ELET 07/07"),
+    ).toBe("SO LUZ MATERIAIS ELET");
     expect(counterpartyFromDescription("COMPRA CARTAO VISA AUTO POSTO AVIADOR L")).toBe(
       "AUTO POSTO AVIADOR L",
     );
   });
 
-  it("uses the extracted counterparty as the historical identity", () => {
+  it("recognizes economic movement direction from bank descriptions", () => {
+    expect(movementDirectionFromDescription("PIX RECEBIDO REM: ELIAS VIEIRA DOS SANT 06/07")).toBe(
+      "entrada",
+    );
+    expect(movementDirectionFromDescription("PIX ENVIADO DES: ELIAS VIEIRA DOS SANT 16/07")).toBe(
+      "saida",
+    );
+    expect(
+      movementDirectionFromDescription("PIX QR CODE ESTATICO DES: SO LUZ MATERIAIS ELET 07/07"),
+    ).toBe("saida");
+  });
+
+  it("uses direction plus counterparty as historical identity", () => {
     expect(
       historyKey({
         description: "PIX QR CODE DINAMICO DES: AUTO POSTO AVIADOR LT 12/05",
         counterparty: null,
       }),
-    ).toBe("AUTO POSTO AVIADOR LT");
+    ).toBe("SAIDA|AUTO POSTO AVIADOR LT");
+
+    expect(
+      historyKey({
+        description: "PIX RECEBIDO REM: ELIAS VIEIRA DOS SANT 06/07",
+        counterparty: null,
+      }),
+    ).toBe("ENTRADA|ELIAS VIEIRA DOS SANT");
   });
 
   it("converts real Bandrones-shaped rows to TrainingInputRow", () => {
@@ -93,6 +119,45 @@ describe("Bandrones training adapter", () => {
 
     expect(parsed.rows[0]?.counterparty).toBe("ELIAS VIEIRA DOS SANT");
     expect(parsed.rows[0]?.originalCategory).toBe("Marketing");
+  });
+
+  it("does not treat incoming and outgoing movements for the same counterparty as a conflict", () => {
+    const parsed = parseBandronesTrainingRows([
+      {
+        Descrição: "PIX RECEBIDO REM: ELIAS VIEIRA DOS SANT 06/07",
+        Categoria: "Receita Bruta",
+      },
+      {
+        Descrição: "PIX ENVIADO DES: ELIAS VIEIRA DOS SANT 16/07",
+        Categoria: "Despesas Variáveis",
+      },
+    ]);
+    const prepared = prepareTrainingBatch(clientId, parsed.rows);
+
+    expect(prepared.conflicts).toHaveLength(0);
+    expect(prepared.ready).toHaveLength(2);
+    expect(prepared.ready.map((item) => item.historyKey).sort()).toEqual([
+      "ENTRADA|ELIAS VIEIRA DOS SANT",
+      "SAIDA|ELIAS VIEIRA DOS SANT",
+    ]);
+  });
+
+  it("keeps a real same-direction classification divergence as conflict", () => {
+    const parsed = parseBandronesTrainingRows([
+      {
+        Descrição: "PIX ENVIADO DES: GUMA COMERCIO DE ALIM 10/05",
+        Categoria: "Pro Labore",
+      },
+      {
+        Descrição: "PIX ENVIADO DES: GUMA COMERCIO DE ALIM 20/05",
+        Categoria: "Outras Despesas",
+      },
+    ]);
+    const prepared = prepareTrainingBatch(clientId, parsed.rows);
+
+    expect(prepared.ready).toHaveLength(0);
+    expect(prepared.conflicts).toHaveLength(1);
+    expect(prepared.conflicts[0]?.historyKey).toBe("SAIDA|GUMA COMERCIO DE ALIM");
   });
 
   it("rejects unknown categories instead of guessing a financial classification", () => {
