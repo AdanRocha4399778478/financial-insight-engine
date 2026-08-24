@@ -5,7 +5,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { UploadCloud } from "lucide-react";
 import { STANDARD_FIELDS, brl, type StandardField } from "@/lib/finance";
-import { guessMapping, normalizeRows, parseSpreadsheet, type ParsedFile } from "@/lib/parse-file";
+import {
+  buildFromHeaderRow,
+  guessMapping,
+  normalizeRows,
+  parseSpreadsheet,
+  type ParsedFile,
+} from "@/lib/parse-file";
 import { commitImport, getSavedMapping } from "@/lib/imports.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
