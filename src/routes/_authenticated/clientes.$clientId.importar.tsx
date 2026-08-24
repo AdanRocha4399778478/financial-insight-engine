@@ -224,7 +224,7 @@ function ImportPage() {
       {parsed && (
         <section className="rounded-lg border border-border bg-card p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">2. Mapeamento de colunas</h2>
+            <h2 className="font-display text-lg font-semibold">3. Mapeamento de colunas</h2>
             {reused && <Badge>Mapeamento reaproveitado deste layout</Badge>}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -274,7 +274,7 @@ function ImportPage() {
 
       {parsed && normalized && hasRequired && (
         <section className="rounded-lg border border-border bg-card p-8">
-          <h2 className="font-display text-lg font-semibold">3. Pré-visualização e confirmação</h2>
+          <h2 className="font-display text-lg font-semibold">4. Pré-visualização e confirmação</h2>
           <div className="mt-4 flex flex-wrap gap-6 text-sm">
             <span>
               <strong className="font-display">{normalized.valid.length}</strong> linhas válidas
