@@ -18,6 +18,7 @@ import { Route as AuthenticatedClientesClientIdIndexRouteImport } from './routes
 import { Route as AuthenticatedClientesClientIdClassificacaoRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao'
 import { Route as AuthenticatedClientesClientIdDreRouteImport } from './routes/_authenticated/clientes.$clientId.dre'
 import { Route as AuthenticatedClientesClientIdImportarRouteImport } from './routes/_authenticated/clientes.$clientId.importar'
+import { Route as AuthenticatedClientesClientIdIndicadoresRouteImport } from './routes/_authenticated/clientes.$clientId.indicadores'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -69,6 +70,12 @@ const AuthenticatedClientesClientIdImportarRoute =
     path: '/importar',
     getParentRoute: () => AuthenticatedClientesClientIdRoute,
   } as any)
+const AuthenticatedClientesClientIdIndicadoresRoute =
+  AuthenticatedClientesClientIdIndicadoresRouteImport.update({
+    id: '/indicadores',
+    path: '/indicadores',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -87,6 +95,7 @@ export interface FileRoutesByTo {
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/clientes/$clientId': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesById {
@@ -99,6 +108,7 @@ export interface FileRoutesById {
   '/_authenticated/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/_authenticated/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/_authenticated/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/_authenticated/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/_authenticated/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/dre'
     | '/clientes/$clientId/importar'
+    | '/clientes/$clientId/indicadores'
     | '/clientes/$clientId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/dre'
     | '/clientes/$clientId/importar'
+    | '/clientes/$clientId/indicadores'
     | '/clientes/$clientId'
   id:
     | '__root__'
@@ -131,6 +143,7 @@ export interface FileRouteTypes {
     | '/_authenticated/clientes/$clientId/classificacao'
     | '/_authenticated/clientes/$clientId/dre'
     | '/_authenticated/clientes/$clientId/importar'
+    | '/_authenticated/clientes/$clientId/indicadores'
     | '/_authenticated/clientes/$clientId/'
   fileRoutesById: FileRoutesById
 }
@@ -205,6 +218,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClientesClientIdImportarRouteImport
       parentRoute: typeof AuthenticatedClientesClientIdRoute
     }
+    '/_authenticated/clientes/$clientId/indicadores': {
+      id: '/_authenticated/clientes/$clientId/indicadores'
+      path: '/indicadores'
+      fullPath: '/clientes/$clientId/indicadores'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdIndicadoresRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
   }
 }
 
@@ -212,6 +232,7 @@ interface AuthenticatedClientesClientIdRouteChildren {
   AuthenticatedClientesClientIdClassificacaoRoute: typeof AuthenticatedClientesClientIdClassificacaoRoute
   AuthenticatedClientesClientIdDreRoute: typeof AuthenticatedClientesClientIdDreRoute
   AuthenticatedClientesClientIdImportarRoute: typeof AuthenticatedClientesClientIdImportarRoute
+  AuthenticatedClientesClientIdIndicadoresRoute: typeof AuthenticatedClientesClientIdIndicadoresRoute
   AuthenticatedClientesClientIdIndexRoute: typeof AuthenticatedClientesClientIdIndexRoute
 }
 
@@ -223,6 +244,8 @@ const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdR
       AuthenticatedClientesClientIdDreRoute,
     AuthenticatedClientesClientIdImportarRoute:
       AuthenticatedClientesClientIdImportarRoute,
+    AuthenticatedClientesClientIdIndicadoresRoute:
+      AuthenticatedClientesClientIdIndicadoresRoute,
     AuthenticatedClientesClientIdIndexRoute:
       AuthenticatedClientesClientIdIndexRoute,
   }
