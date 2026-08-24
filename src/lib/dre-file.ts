@@ -100,7 +100,7 @@ export interface DreFactRow {
   period: string;
   period_label: string;
   amount: number;
-  source_row?: number;
+  source_row?: number | undefined;
 }
 
 export interface DreFactConflict {
@@ -108,7 +108,7 @@ export interface DreFactConflict {
   account_name: string;
   period: string;
   period_label: string;
-  values: { amount: number; source_row?: number }[];
+  values: { amount: number; source_row?: number | undefined }[];
 }
 
 export interface DreDedupeResult {
