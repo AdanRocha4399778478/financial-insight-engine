@@ -10,6 +10,7 @@ import { parseSpreadsheet } from "@/lib/parse-file";
 import { parseBandronesTrainingRows } from "@/lib/bandrones-training";
 import { parseErinhoTrainingRows } from "@/lib/erinho-training";
 import type { TrainingInputRow } from "@/lib/training-import";
+import { estimateTrainingCoverage } from "@/lib/training-coverage.functions";
 import {
   getTrainingKnowledgeSummary,
   importTrainingExamples,
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/treinam
 });
 
 type PreviewResult = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof previewTrainingExamples>>>>;
+type CoverageResult = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof estimateTrainingCoverage>>>>;
 type RejectedRow = { sourceRowNumber: number; reason: string };
 type TrainingFormat = "bandrones" | "erinho";
 
@@ -35,6 +37,7 @@ function TrainingPage() {
   const { clientId } = Route.useParams();
   const queryClient = useQueryClient();
   const previewFn = useServerFn(previewTrainingExamples);
+  const coverageFn = useServerFn(estimateTrainingCoverage);
   const importFn = useServerFn(importTrainingExamples);
   const summaryFn = useServerFn(getTrainingKnowledgeSummary);
 
@@ -43,6 +46,7 @@ function TrainingPage() {
   const [rejected, setRejected] = useState<RejectedRow[]>([]);
   const [format, setFormat] = useState<TrainingFormat | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [coverage, setCoverage] = useState<CoverageResult | null>(null);
   const [reading, setReading] = useState(false);
 
   const summary = useQuery({
@@ -54,6 +58,12 @@ function TrainingPage() {
     mutationFn: async (nextRows: TrainingInputRow[]) => previewFn({ data: { clientId, rows: nextRows } }),
     onSuccess: setPreview,
     onError: (error: Error) => toast.error(error.message),
+  });
+
+  const coverageMutation = useMutation({
+    mutationFn: async (nextRows: TrainingInputRow[]) => coverageFn({ data: { clientId, rows: nextRows } }),
+    onSuccess: setCoverage,
+    onError: (error: Error) => toast.error(`Não foi possível estimar cobertura: ${error.message}`),
   });
 
   const importMutation = useMutation({
@@ -70,8 +80,12 @@ function TrainingPage() {
     onSuccess: async (result) => {
       toast.success(`${result.inserted} conhecimentos adicionados ao cliente.`);
       setPreview(null);
+      setCoverage(null);
       await queryClient.invalidateQueries({ queryKey: ["training-summary", clientId] });
-      await previewMutation.mutateAsync(rows);
+      await Promise.all([
+        previewMutation.mutateAsync(rows),
+        coverageMutation.mutateAsync(rows),
+      ]);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -79,6 +93,7 @@ function TrainingPage() {
   const handleFile = async (selected: File) => {
     setReading(true);
     setPreview(null);
+    setCoverage(null);
     try {
       const parsedFile = await parseSpreadsheet(selected);
       const detectedFormat = detectTrainingFormat(parsedFile.rows);
@@ -91,12 +106,16 @@ function TrainingPage() {
       setFormat(detectedFormat);
       setRows(parsedTraining.rows);
       setRejected(parsedTraining.rejected);
-      await previewMutation.mutateAsync(parsedTraining.rows);
+      await Promise.all([
+        previewMutation.mutateAsync(parsedTraining.rows),
+        coverageMutation.mutateAsync(parsedTraining.rows),
+      ]);
     } catch (error) {
       setFile(null);
       setFormat(null);
       setRows([]);
       setRejected([]);
+      setCoverage(null);
       toast.error(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");
     } finally {
       setReading(false);
@@ -140,7 +159,7 @@ function TrainingPage() {
             type="file"
             accept=".xlsx,.xls,.csv"
             className="hidden"
-            disabled={reading || previewMutation.isPending || importMutation.isPending}
+            disabled={reading || previewMutation.isPending || coverageMutation.isPending || importMutation.isPending}
             onChange={(event) => {
               const selected = event.target.files?.[0];
               if (selected) void handleFile(selected);
@@ -164,6 +183,26 @@ function TrainingPage() {
             <Metric label="Conflitos" value={conflicts.length} />
             <Metric label="Inválidas" value={invalidCount + rejected.length} />
           </div>
+
+          {coverage && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h3 className="font-medium">Cobertura estimada sobre pendências atuais</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Simulação sem gravar conhecimento e sem alterar lançamentos.
+                  </p>
+                </div>
+                <div className="font-display text-3xl font-semibold">{coverage.estimatedCoveragePct}%</div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Metric label="Pendências atuais" value={coverage.totalPending} />
+                <Metric label="Matches seguros" value={coverage.safeMatches} />
+                <Metric label="Matches conflitantes" value={coverage.conflictMatches} />
+                <Metric label="Sem cobertura" value={coverage.uncovered} />
+              </div>
+            </div>
+          )}
 
           {conflicts.length > 0 && (
             <div className="space-y-3">
