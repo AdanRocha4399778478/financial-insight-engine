@@ -1,0 +1,1 @@
+DELETE FROM public.clients WHERE name = 'Cliente Teste QA';
