@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       account_mappings: {
@@ -504,6 +529,77 @@ export type Database = {
           },
         ]
       }
+      training_examples: {
+        Row: {
+          account: string
+          active: boolean
+          area: string | null
+          behavior: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          counterparty: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          fingerprint: string
+          history_key: string
+          id: string
+          nature: Database["public"]["Enums"]["entry_nature"]
+          original_category: string | null
+          source_file: string | null
+          source_row_number: number | null
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          account: string
+          active?: boolean
+          area?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          fingerprint: string
+          history_key: string
+          id?: string
+          nature: Database["public"]["Enums"]["entry_nature"]
+          original_category?: string | null
+          source_file?: string | null
+          source_row_number?: number | null
+          source_type?: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string
+          active?: boolean
+          area?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id?: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          fingerprint?: string
+          history_key?: string
+          id?: string
+          nature?: Database["public"]["Enums"]["entry_nature"]
+          original_category?: string | null
+          source_file?: string | null
+          source_row_number?: number | null
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_examples_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -685,6 +781,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "consultor"],
