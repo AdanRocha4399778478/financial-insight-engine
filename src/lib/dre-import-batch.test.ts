@@ -78,4 +78,26 @@ describe("prepareDreFactBatch", () => {
     expect(result.conflicts).toHaveLength(1);
     expect(result.facts).toHaveLength(0);
   });
+
+  test("usa o nome como identidade quando códigos simbólicos normalizam para vazio", () => {
+    const result = prepareDreFactBatch(CLIENT_ID, [
+      fact({
+        account_code: "*",
+        account_name: "LUCRO LÍQUIDO",
+        amount: 136089.91,
+        source_row: 77,
+      }),
+      fact({
+        account_code: "+",
+        account_name: "PONTO DE EQUILÍBRIO OPERACIONAL",
+        amount: 59796.995,
+        source_row: 78,
+      }),
+    ]);
+
+    expect(result.conflicts).toHaveLength(0);
+    expect(result.duplicatesRemoved).toBe(0);
+    expect(result.facts).toHaveLength(2);
+    expect(new Set(result.facts.map((prepared) => prepared.fingerprint)).size).toBe(2);
+  });
 });
