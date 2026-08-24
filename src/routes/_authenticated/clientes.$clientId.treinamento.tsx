@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { parseSpreadsheet } from "@/lib/parse-file";
 import { parseBandronesTrainingRows } from "@/lib/bandrones-training";
+import { parseErinhoTrainingRows } from "@/lib/erinho-training";
+import type { TrainingInputRow } from "@/lib/training-import";
 import {
   getTrainingKnowledgeSummary,
   importTrainingExamples,
@@ -19,6 +21,15 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/treinam
 });
 
 type PreviewResult = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof previewTrainingExamples>>>>;
+type RejectedRow = { sourceRowNumber: number; reason: string };
+type TrainingFormat = "bandrones" | "erinho";
+
+function detectTrainingFormat(sourceRows: Record<string, unknown>[]): TrainingFormat {
+  const first = sourceRows[0] ?? {};
+  const keys = new Set(Object.keys(first));
+  if (keys.has("Descrição Detalhada") || keys.has("C/D")) return "erinho";
+  return "bandrones";
+}
 
 function TrainingPage() {
   const { clientId } = Route.useParams();
@@ -28,8 +39,9 @@ function TrainingPage() {
   const summaryFn = useServerFn(getTrainingKnowledgeSummary);
 
   const [file, setFile] = useState<File | null>(null);
-  const [rows, setRows] = useState<ReturnType<typeof parseBandronesTrainingRows>["rows"]>([]);
-  const [rejected, setRejected] = useState<ReturnType<typeof parseBandronesTrainingRows>["rejected"]>([]);
+  const [rows, setRows] = useState<TrainingInputRow[]>([]);
+  const [rejected, setRejected] = useState<RejectedRow[]>([]);
+  const [format, setFormat] = useState<TrainingFormat | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [reading, setReading] = useState(false);
 
@@ -39,7 +51,7 @@ function TrainingPage() {
   });
 
   const previewMutation = useMutation({
-    mutationFn: async (nextRows: typeof rows) => previewFn({ data: { clientId, rows: nextRows } }),
+    mutationFn: async (nextRows: TrainingInputRow[]) => previewFn({ data: { clientId, rows: nextRows } }),
     onSuccess: setPreview,
     onError: (error: Error) => toast.error(error.message),
   });
@@ -69,14 +81,20 @@ function TrainingPage() {
     setPreview(null);
     try {
       const parsedFile = await parseSpreadsheet(selected);
-      const parsedTraining = parseBandronesTrainingRows(parsedFile.rows);
+      const detectedFormat = detectTrainingFormat(parsedFile.rows);
+      const parsedTraining =
+        detectedFormat === "erinho"
+          ? parseErinhoTrainingRows(parsedFile.rows)
+          : parseBandronesTrainingRows(parsedFile.rows);
       if (!parsedTraining.rows.length) throw new Error("Nenhuma linha válida de treinamento foi encontrada.");
       setFile(selected);
+      setFormat(detectedFormat);
       setRows(parsedTraining.rows);
       setRejected(parsedTraining.rejected);
       await previewMutation.mutateAsync(parsedTraining.rows);
     } catch (error) {
       setFile(null);
+      setFormat(null);
       setRows([]);
       setRejected([]);
       toast.error(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");
@@ -111,7 +129,13 @@ function TrainingPage() {
         <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 py-10 text-center hover:bg-muted/30">
           <UploadCloud className="mb-3 h-8 w-8 text-muted-foreground" />
           <span className="text-sm font-medium">{file?.name ?? "Selecionar XLSX, XLS ou CSV"}</span>
-          <span className="mt-1 text-xs text-muted-foreground">Formato atual: planilha histórica no padrão Bandrones</span>
+          <span className="mt-1 text-xs text-muted-foreground">
+            {format === "erinho"
+              ? "Formato detectado: Grupo Erinho"
+              : format === "bandrones"
+                ? "Formato detectado: Bandrones"
+                : "Formatos suportados: Bandrones e Grupo Erinho"}
+          </span>
           <input
             type="file"
             accept=".xlsx,.xls,.csv"
