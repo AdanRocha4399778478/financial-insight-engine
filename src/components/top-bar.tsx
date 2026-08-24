@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
-export function TopBar({ email, isAdmin }: { email?: string | null; isAdmin?: boolean }) {
+export function TopBar({ email, isAdmin }: { email?: string | null | undefined; isAdmin?: boolean | undefined }) {
   const navigate = useNavigate();
 
   return (
