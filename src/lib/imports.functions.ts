@@ -64,17 +64,16 @@ export const commitImport = createServerFn({ method: "POST" })
       .eq("active", true)
       .or(`client_id.eq.${data.clientId},client_id.is.null`);
 
-    const { data: historyRows } = await supabase
+    const { data: historyRows, error: historyError } = await supabase
       .from("entries")
       .select("description, counterparty, account, nature, behavior, area")
       .eq("client_id", data.clientId)
       .in("status", ["confirmado", "auto"])
       .not("account", "is", null)
       .limit(5000);
+    if (historyError) throw new Error(historyError.message);
 
-    // training_examples foi adicionada por migration nesta branch. O cast local
-    // evita bloquear a integração até a próxima regeneração dos tipos Supabase.
-    const { data: trainingRows, error: trainingError } = await (supabase as any)
+    const { data: trainingRows, error: trainingError } = await supabase
       .from("training_examples")
       .select("history_key, account, nature, behavior, area")
       .eq("client_id", data.clientId)
