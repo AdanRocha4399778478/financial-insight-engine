@@ -103,6 +103,17 @@ export interface DreFactRow {
   source_row?: number | undefined;
 }
 
+/**
+ * Identidade estável da conta para deduplicação e fingerprint.
+ * Usa o código quando ele continua informativo após normalização; códigos apenas
+ * simbólicos (ex.: "*" ou "+") usam o nome da conta como fallback.
+ */
+export function dreAccountIdentity(
+  fact: Pick<DreFactRow, "account_code" | "account_name">,
+): string {
+  return normalize(fact.account_code) || normalize(fact.account_name);
+}
+
 export interface DreFactConflict {
   account_code: string;
   account_name: string;
@@ -125,12 +136,12 @@ export interface DreParseResult {
   conflicts: DreFactConflict[];
 }
 
-/** Garante no máximo um fato por (conta, período). Idênticos são removidos; divergentes viram conflito. */
+/** Garante no máximo um fato por identidade final da conta + período. */
 export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
   const groups = new Map<string, DreFactRow[]>();
   const order: string[] = [];
   for (const fact of facts) {
-    const key = `${fact.account_code}::${fact.period}`;
+    const key = `${dreAccountIdentity(fact)}::${fact.period}`;
     const bucket = groups.get(key);
     if (bucket) bucket.push(fact);
     else {
@@ -212,4 +223,3 @@ export function buildDreFacts(
     conflicts,
   };
 }
-
