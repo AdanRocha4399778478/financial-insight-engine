@@ -52,7 +52,7 @@ function ClientLayout() {
               <Link
                 key={tab.to}
                 to={tab.to as never}
-                params={{ clientId }}
+                params={{ clientId } as never}
                 activeOptions={{ exact: tab.exact ?? false }}
                 className="whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground"
               >
