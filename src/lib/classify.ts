@@ -47,8 +47,43 @@ export const normalize = (s: string | null | undefined) =>
     .replace(/\s+/g, " ")
     .trim();
 
+function cleanExtractedCounterparty(value: string): string {
+  return normalize(value.replace(/\s+\d{2}\/\d{2}\s*$/, ""));
+}
+
+/**
+ * Extrai a contraparte quando ela vem embutida no histórico bancário.
+ * Mantemos esta lógica junto do historyKey para que treinamento e futuras
+ * importações usem exatamente a mesma identidade histórica.
+ */
+export function counterpartyFromDescription(description: string): string | null {
+  const raw = (description ?? "").trim();
+  if (!raw) return null;
+
+  const patterns = [
+    /^PIX\s+QR\s+CODE\s+DINAMICO\s+DES:\s*(.+)$/i,
+    /^PIX\s+ENVIADO\s+DES:\s*(.+)$/i,
+    /^PIX\s+RECEBIDO\s+REM:\s*(.+)$/i,
+    /^TED-TRANSF\s+ELET\s+DISPON\s+REMET\.\s*(.+)$/i,
+    /^COMPRA\s+CARTAO\s+VISA\s+(.+)$/i,
+    /^CARTAO\s+VISA\s+ELECTRON\s+(.+)$/i,
+    /^PAGTO\s+ELETRON\s+COBRANCA\s+(.+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match?.[1]) continue;
+    const candidate = cleanExtractedCounterparty(match[1]);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
 export const historyKey = (e: { description: string; counterparty: string | null }) =>
-  normalize(e.counterparty) || normalize(e.description).split(" ").slice(0, 4).join(" ");
+  normalize(e.counterparty) ||
+  counterpartyFromDescription(e.description) ||
+  normalize(e.description).split(" ").slice(0, 4).join(" ");
 
 export function statusFor(confidence: number): Classification["status"] {
   if (confidence >= 0.85) return "auto";
