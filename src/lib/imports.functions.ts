@@ -156,7 +156,7 @@ export const commitImport = createServerFn({ method: "POST" })
         original_category: row.original_category,
         cost_center: row.cost_center,
         document: row.document,
-        raw: row.raw as TablesInsert<"entries">["raw"],
+        raw: row.raw as NonNullable<TablesInsert<"entries">["raw"]>,
         fingerprint: data.allowDuplicates ? `${fp}-${payload.length}` : fp,
         account: result.account,
         nature: result.nature,

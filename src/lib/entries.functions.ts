@@ -35,7 +35,7 @@ export const listEntries = createServerFn({ method: "GET" })
       .order("entry_date", { ascending: false })
       .limit(data.limit);
 
-    if (data.status && data.status !== "todos") query = query.eq("status", data.status);
+    if (data.status && data.status !== "todos") query = query.eq("status", data.status as never);
     if (data.importId) query = query.eq("import_id", data.importId);
     if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
 
