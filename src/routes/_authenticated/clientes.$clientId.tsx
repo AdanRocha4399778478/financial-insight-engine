@@ -8,14 +8,14 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId")({
   component: ClientLayout,
 });
 
-const tabs = [
+const tabs: { to: string; label: string; exact?: boolean }[] = [
   { to: "/clientes/$clientId", label: "Visão geral", exact: true },
   { to: "/clientes/$clientId/importar", label: "Importar" },
   { to: "/clientes/$clientId/classificacao", label: "Classificação" },
   { to: "/clientes/$clientId/dre", label: "DRE" },
   { to: "/clientes/$clientId/indicadores", label: "Indicadores" },
   { to: "/clientes/$clientId/governanca", label: "Governança" },
-] as const;
+];
 
 function ClientLayout() {
   const { clientId } = Route.useParams();
@@ -51,7 +51,7 @@ function ClientLayout() {
             {tabs.map((tab) => (
               <Link
                 key={tab.to}
-                to={tab.to}
+                to={tab.to as never}
                 params={{ clientId }}
                 activeOptions={{ exact: tab.exact ?? false }}
                 className="whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground"
