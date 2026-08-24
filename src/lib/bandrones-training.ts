@@ -1,3 +1,4 @@
+import { counterpartyFromDescription } from "./classify";
 import type { Behavior, Nature } from "./finance";
 import type { TrainingInputRow } from "./training-import";
 
@@ -26,16 +27,19 @@ interface CategoryMapping {
  * financeiro do produto. Nada aqui depende de data ou valor do lançamento.
  */
 const CATEGORY_MAPPING: Record<string, CategoryMapping> = {
-  "RECEITA BRUTA": { nature: "receita_bruta", behavior: "variavel" },
+  "RECEITA BRUTA": { nature: "receita_bruta", behavior: "nao_aplicavel" },
   "TAXAS E IMPOSTOS SOBRE VENDA": { nature: "deducao", behavior: "variavel" },
   "CUSTO DE MERCADORIA VENDIDA": { nature: "custo", behavior: "variavel" },
   "DESPESAS FIXAS": { nature: "despesa", behavior: "fixo" },
   "DESPESAS VARIAVEIS": { nature: "despesa", behavior: "variavel" },
   "PRO LABORE": { nature: "despesa", behavior: "fixo" },
   "OUTRAS DESPESAS": { nature: "despesa", behavior: "nao_definido" },
-  "CREDITO DE AJUSTE DE CONTAS": { nature: "transferencia", behavior: "nao_aplicavel" },
-  "DEBITO DE AJUSTE DE CONTAS": { nature: "transferencia", behavior: "nao_aplicavel" },
   "EXCLUSO DRE": { nature: "excluido", behavior: "nao_aplicavel" },
+
+  // O histórico não traz semântica suficiente para decidir se estes ajustes
+  // são transferência, receita/despesa ou apenas acerto interno.
+  "CREDITO DE AJUSTE DE CONTAS": { nature: "nao_definido", behavior: "nao_definido" },
+  "DEBITO DE AJUSTE DE CONTAS": { nature: "nao_definido", behavior: "nao_definido" },
 };
 
 function text(value: unknown): string {
@@ -95,7 +99,7 @@ export function parseBandronesTrainingRows(
 
     result.rows.push({
       description,
-      counterparty: null,
+      counterparty: counterpartyFromDescription(description),
       originalCategory: expenseContext ?? businessContext,
       account,
       nature: mapping.nature,
