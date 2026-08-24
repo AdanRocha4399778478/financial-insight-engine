@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json, TablesInsert } from "@/integrations/supabase/types";
 import { classifyEntry, historyKey, type RuleLike } from "./classify";
 import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
 
@@ -82,16 +83,7 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
     let automatic = 0;
     let suggested = 0;
     let unchanged = 0;
-    const auditRows: Array<{
-      client_id: string;
-      entry_id: string;
-      user_id: string;
-      previous: Record<string, unknown>;
-      next: Record<string, unknown>;
-      source: string;
-      confidence: number;
-      became_rule: boolean;
-    }> = [];
+    const auditRows: TablesInsert<"classification_audit">[] = [];
 
     for (const row of pendingRows ?? []) {
       const result = classifyEntry(
@@ -144,14 +136,14 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
           behavior: row.behavior,
           area: row.area,
           status: row.status,
-        },
+        } as Json,
         next: {
           account: result.account,
           nature: result.nature,
           behavior: result.behavior,
           area: result.area,
           status: result.status,
-        },
+        } as Json,
         source: result.source,
         confidence: result.confidence,
         became_rule: false,
