@@ -17,6 +17,7 @@ import { Route as AuthenticatedClientesClientIdRouteImport } from './routes/_aut
 import { Route as AuthenticatedClientesClientIdIndexRouteImport } from './routes/_authenticated/clientes.$clientId.index'
 import { Route as AuthenticatedClientesClientIdClassificacaoRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao'
 import { Route as AuthenticatedClientesClientIdDreRouteImport } from './routes/_authenticated/clientes.$clientId.dre'
+import { Route as AuthenticatedClientesClientIdGovernancaRouteImport } from './routes/_authenticated/clientes.$clientId.governanca'
 import { Route as AuthenticatedClientesClientIdImportarRouteImport } from './routes/_authenticated/clientes.$clientId.importar'
 import { Route as AuthenticatedClientesClientIdIndicadoresRouteImport } from './routes/_authenticated/clientes.$clientId.indicadores'
 
@@ -64,6 +65,12 @@ const AuthenticatedClientesClientIdDreRoute =
     path: '/dre',
     getParentRoute: () => AuthenticatedClientesClientIdRoute,
   } as any)
+const AuthenticatedClientesClientIdGovernancaRoute =
+  AuthenticatedClientesClientIdGovernancaRouteImport.update({
+    id: '/governanca',
+    path: '/governanca',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
 const AuthenticatedClientesClientIdImportarRoute =
   AuthenticatedClientesClientIdImportarRouteImport.update({
     id: '/importar',
@@ -84,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/clientes/': typeof AuthenticatedClientesIndexRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/clientes': typeof AuthenticatedClientesIndexRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/clientes/$clientId': typeof AuthenticatedClientesClientIdIndexRoute
@@ -107,6 +116,7 @@ export interface FileRoutesById {
   '/_authenticated/clientes/': typeof AuthenticatedClientesIndexRoute
   '/_authenticated/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/_authenticated/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/_authenticated/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/_authenticated/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/_authenticated/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
   '/_authenticated/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/clientes/'
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/dre'
+    | '/clientes/$clientId/governanca'
     | '/clientes/$clientId/importar'
     | '/clientes/$clientId/indicadores'
     | '/clientes/$clientId/'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/clientes'
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/dre'
+    | '/clientes/$clientId/governanca'
     | '/clientes/$clientId/importar'
     | '/clientes/$clientId/indicadores'
     | '/clientes/$clientId'
@@ -142,6 +154,7 @@ export interface FileRouteTypes {
     | '/_authenticated/clientes/'
     | '/_authenticated/clientes/$clientId/classificacao'
     | '/_authenticated/clientes/$clientId/dre'
+    | '/_authenticated/clientes/$clientId/governanca'
     | '/_authenticated/clientes/$clientId/importar'
     | '/_authenticated/clientes/$clientId/indicadores'
     | '/_authenticated/clientes/$clientId/'
@@ -211,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClientesClientIdDreRouteImport
       parentRoute: typeof AuthenticatedClientesClientIdRoute
     }
+    '/_authenticated/clientes/$clientId/governanca': {
+      id: '/_authenticated/clientes/$clientId/governanca'
+      path: '/governanca'
+      fullPath: '/clientes/$clientId/governanca'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdGovernancaRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
     '/_authenticated/clientes/$clientId/importar': {
       id: '/_authenticated/clientes/$clientId/importar'
       path: '/importar'
@@ -231,6 +251,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedClientesClientIdRouteChildren {
   AuthenticatedClientesClientIdClassificacaoRoute: typeof AuthenticatedClientesClientIdClassificacaoRoute
   AuthenticatedClientesClientIdDreRoute: typeof AuthenticatedClientesClientIdDreRoute
+  AuthenticatedClientesClientIdGovernancaRoute: typeof AuthenticatedClientesClientIdGovernancaRoute
   AuthenticatedClientesClientIdImportarRoute: typeof AuthenticatedClientesClientIdImportarRoute
   AuthenticatedClientesClientIdIndicadoresRoute: typeof AuthenticatedClientesClientIdIndicadoresRoute
   AuthenticatedClientesClientIdIndexRoute: typeof AuthenticatedClientesClientIdIndexRoute
@@ -242,6 +263,8 @@ const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdR
       AuthenticatedClientesClientIdClassificacaoRoute,
     AuthenticatedClientesClientIdDreRoute:
       AuthenticatedClientesClientIdDreRoute,
+    AuthenticatedClientesClientIdGovernancaRoute:
+      AuthenticatedClientesClientIdGovernancaRoute,
     AuthenticatedClientesClientIdImportarRoute:
       AuthenticatedClientesClientIdImportarRoute,
     AuthenticatedClientesClientIdIndicadoresRoute:
