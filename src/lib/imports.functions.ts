@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { classifyEntry, fingerprint, historyKey, type HistoryLike, type RuleLike } from "./classify";
+import type { TablesInsert } from "@/integrations/supabase/types";
 
 export const getSavedMapping = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -109,7 +110,7 @@ export const commitImport = createServerFn({ method: "POST" })
     let pending = 0;
     let auto = 0;
     let suggested = 0;
-    const payload: Record<string, unknown>[] = [];
+    const payload: TablesInsert<"entries">[] = [];
 
     for (const row of data.rows) {
       const fp = fingerprint([
@@ -155,7 +156,7 @@ export const commitImport = createServerFn({ method: "POST" })
         original_category: row.original_category,
         cost_center: row.cost_center,
         document: row.document,
-        raw: row.raw,
+        raw: row.raw as TablesInsert<"entries">["raw"],
         fingerprint: data.allowDuplicates ? `${fp}-${payload.length}` : fp,
         account: result.account,
         nature: result.nature,
