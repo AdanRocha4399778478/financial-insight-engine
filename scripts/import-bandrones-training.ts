@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { createClient } from "@supabase/supabase-js";
-import * as XLSX from "xlsx";
 import { parseBandronesTrainingRows } from "../src/lib/bandrones-training";
 import {
   prepareTrainingBatch,
   type ExistingTrainingExample,
 } from "../src/lib/training-import";
+
+const require = createRequire(import.meta.url);
+const XLSX = require("xlsx") as typeof import("xlsx");
 
 function readEnvFile(filePath: string): Record<string, string> {
   const out: Record<string, string> = {};
