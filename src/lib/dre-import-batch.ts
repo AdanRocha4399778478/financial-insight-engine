@@ -1,4 +1,5 @@
 import { fingerprint, normalize } from "./classify";
+import { dreAccountIdentity } from "./dre-file";
 import type { DreFactRow } from "./dre-file";
 
 export interface PreparedDreFact extends DreFactRow {
@@ -23,7 +24,7 @@ export interface PreparedDreBatch {
 }
 
 function semanticKey(fact: DreFactRow): string {
-  return `${normalize(fact.account_code)}\u0000${normalize(fact.account_name)}\u0000${fact.period}`;
+  return `${dreAccountIdentity(fact)}\u0000${normalize(fact.account_name)}\u0000${fact.period}`;
 }
 
 /**
@@ -36,7 +37,8 @@ export function prepareDreFactBatch(clientId: string, facts: DreFactRow[]): Prep
   const order: string[] = [];
 
   for (const fact of facts) {
-    const finalFingerprint = fingerprint([clientId, fact.account_code, fact.period]);
+    const accountIdentity = dreAccountIdentity(fact);
+    const finalFingerprint = fingerprint([clientId, accountIdentity, fact.period]);
     const prepared = { ...fact, client_id: clientId, fingerprint: finalFingerprint };
     const databaseKey = `${clientId}\u0000${finalFingerprint}`;
     const bucket = groups.get(databaseKey);
