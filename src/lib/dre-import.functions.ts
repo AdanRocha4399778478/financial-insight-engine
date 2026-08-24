@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { fingerprint } from "./classify";
+import { dedupeDreFacts } from "./dre-file";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 const factSchema = z.object({
@@ -10,6 +11,7 @@ const factSchema = z.object({
   period: z.string().min(10).max(10),
   period_label: z.string().max(40),
   amount: z.number(),
+  source_row: z.number().optional(),
 });
 
 /** Importação tipo B: DRE já consolidada. Não gera lançamentos nem fila de classificação. */
@@ -38,6 +40,22 @@ export const commitDreImport = createServerFn({ method: "POST" })
     if (clientError) throw new Error(clientError.message);
     if (!client) throw new Error("Cliente não encontrado ou sem permissão de acesso.");
 
+    const deduped = dedupeDreFacts(data.facts);
+    if (deduped.conflicts.length) {
+      const detail = deduped.conflicts
+        .slice(0, 10)
+        .map(
+          (c) =>
+            `${c.account_code} · ${c.account_name} · ${c.period_label}: ${c.values
+              .map((v) => (v.source_row ? `linha ${v.source_row} = ${v.amount}` : String(v.amount)))
+              .join(" vs ")}`,
+        )
+        .join(" | ");
+      throw new Error(
+        `Importação bloqueada: ${deduped.conflicts.length} conta(s)/período(s) com valores divergentes no mesmo arquivo. ${detail}`,
+      );
+    }
+
     const { data: importRow, error: importError } = await supabase
       .from("imports")
       .insert({
@@ -53,7 +71,7 @@ export const commitDreImport = createServerFn({ method: "POST" })
       .single();
     if (importError) throw new Error(importError.message);
 
-    const payload: TablesInsert<"dre_facts">[] = data.facts.map((f) => ({
+    const payload: TablesInsert<"dre_facts">[] = deduped.facts.map((f) => ({
       client_id: data.clientId,
       import_id: importRow.id,
       account_code: f.account_code,
@@ -72,7 +90,7 @@ export const commitDreImport = createServerFn({ method: "POST" })
     }
 
     const accounts = new Map<string, string>();
-    for (const f of data.facts) accounts.set(f.account_code, f.account_name);
+    for (const f of deduped.facts) accounts.set(f.account_code, f.account_name);
 
     const { data: existingMaps } = await supabase
       .from("account_mappings")
@@ -105,7 +123,8 @@ export const commitDreImport = createServerFn({ method: "POST" })
       facts: payload.length,
       accounts: accounts.size,
       toMap: newMaps.length,
-      periods: [...new Set(data.facts.map((f) => f.period))].length,
+      periods: [...new Set(deduped.facts.map((f) => f.period))].length,
+      duplicatesRemoved: deduped.duplicatesRemoved,
     };
   });
 
