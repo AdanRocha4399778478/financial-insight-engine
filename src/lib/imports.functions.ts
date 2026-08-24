@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { classifyEntry, fingerprint, historyKey, type HistoryLike, type RuleLike } from "./classify";
+import { classifyEntry, fingerprint, historyKey, type RuleLike } from "./classify";
+import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 export const getSavedMapping = createServerFn({ method: "GET" })
@@ -71,19 +72,44 @@ export const commitImport = createServerFn({ method: "POST" })
       .not("account", "is", null)
       .limit(5000);
 
-    const historyMap = new Map<string, HistoryLike>();
+    // training_examples foi adicionada por migration nesta branch. O cast local
+    // evita bloquear a integração até a próxima regeneração dos tipos Supabase.
+    const { data: trainingRows, error: trainingError } = await (supabase as any)
+      .from("training_examples")
+      .select("history_key, account, nature, behavior, area")
+      .eq("client_id", data.clientId)
+      .eq("active", true)
+      .limit(5000);
+    if (trainingError) throw new Error(trainingError.message);
+
+    const historyCandidates: HistoryCandidate[] = [];
     for (const h of historyRows ?? []) {
       const key = historyKey({ description: h.description, counterparty: h.counterparty });
-      if (key && !historyMap.has(key) && h.account) {
-        historyMap.set(key, {
+      if (key && h.account) {
+        historyCandidates.push({
           key,
           account: h.account,
           nature: h.nature,
           behavior: h.behavior,
           area: h.area,
+          source: "entry",
         });
       }
     }
+    for (const h of trainingRows ?? []) {
+      if (h.history_key && h.account) {
+        historyCandidates.push({
+          key: h.history_key,
+          account: h.account,
+          nature: h.nature,
+          behavior: h.behavior,
+          area: h.area,
+          source: "training",
+        });
+      }
+    }
+
+    const { history } = mergeHistoryCandidates(historyCandidates);
 
     const { data: existing } = await supabase
       .from("entries")
@@ -137,7 +163,7 @@ export const commitImport = createServerFn({ method: "POST" })
           clientId: data.clientId,
           segment: client.segment,
           rules: (rules ?? []) as unknown as RuleLike[],
-          history: [...historyMap.values()],
+          history,
         },
       );
 
