@@ -201,8 +201,8 @@ export interface Indicator {
   label: string;
   value: number | null;
   format: "currency" | "percent";
-  reason?: string;
-  hint?: string;
+  reason?: string | undefined;
+  hint?: string | undefined;
 }
 
 export function buildIndicators(d: DreResult, hasData: boolean): Indicator[] {
