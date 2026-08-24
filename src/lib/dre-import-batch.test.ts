@@ -21,7 +21,7 @@ describe("prepareDreFactBatch", () => {
   test("prepara exatamente um fato por client_id + fingerprint", () => {
     const result = prepareDreFactBatch(CLIENT_ID, [
       fact(),
-      fact({ account_code: "1-01", source_row: 2 }),
+      fact({ account_code: "1-01", account_name: "  receita  ", source_row: 2 }),
       fact({ account_code: "2.01", account_name: "Custos", amount: -40, source_row: 3 }),
     ]);
 
@@ -50,6 +50,23 @@ describe("prepareDreFactBatch", () => {
       { amount: 100, source_row: 7 },
       { amount: 125, source_row: 9 },
     ]);
+  });
+
+  test("bloqueia fatos com o mesmo fingerprint e nomes de conta divergentes", () => {
+    const result = prepareDreFactBatch(CLIENT_ID, [
+      fact({ account_name: "Receita Bruta", amount: 100, source_row: 4 }),
+      fact({
+        account_code: "1-01",
+        account_name: "Receita de Serviços",
+        amount: 100,
+        source_row: 6,
+      }),
+    ]);
+
+    expect(result.facts).toHaveLength(0);
+    expect(result.duplicatesRemoved).toBe(0);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0]?.account_name).toBe("Receita Bruta");
   });
 
   test("não trata valores diferentes na terceira casa decimal como idênticos", () => {

@@ -23,7 +23,7 @@ export interface PreparedDreBatch {
 }
 
 function semanticKey(fact: DreFactRow): string {
-  return `${normalize(fact.account_code)}\u0000${fact.period}`;
+  return `${normalize(fact.account_code)}\u0000${normalize(fact.account_name)}\u0000${fact.period}`;
 }
 
 /**
