@@ -6,6 +6,90 @@ export interface ParsedFile {
   columns: string[];
   rows: Record<string, unknown>[];
   signature: string;
+  matrix: unknown[][];
+  headerRow: number;
+  confident: boolean;
+}
+
+const HEADER_TOKENS = [
+  "DATA",
+  "DESCRICAO",
+  "HISTORICO",
+  "FORNECEDOR",
+  "FAVORECIDO",
+  "BENEFICIARIO",
+  "CONTRAPARTE",
+  "VALOR",
+  "CREDITO",
+  "DEBITO",
+  "CATEGORIA",
+  "DOCUMENTO",
+  "CENTRO DE CUSTO",
+  "CENTRO CUSTO",
+  "TIPO",
+  "SALDO",
+  "LANCAMENTO",
+  "MONTANTE",
+];
+
+const cellText = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
+
+function scoreRow(row: unknown[]): number {
+  const cells = row.map(cellText);
+  const filled = cells.filter((c) => c !== "");
+  if (filled.length < 2) return -1;
+  let hits = 0;
+  let numeric = 0;
+  for (const cell of filled) {
+    const n = normalize(cell);
+    if (!n) continue;
+    if (HEADER_TOKENS.some((t) => n === t || n.startsWith(t) || n.includes(t))) hits += 1;
+    if (/^[\d.,\-R$/\s]+$/.test(cell)) numeric += 1;
+  }
+  if (hits === 0) return -1;
+  return hits * 3 + filled.length * 0.2 - numeric * 2;
+}
+
+export function detectHeaderRow(matrix: unknown[][]): { index: number; confident: boolean } {
+  const limit = Math.min(matrix.length, 25);
+  let best = -1;
+  let bestScore = 0;
+  for (let i = 0; i < limit; i += 1) {
+    const score = scoreRow(matrix[i] ?? []);
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  if (best < 0 || bestScore < 6) return { index: best < 0 ? 0 : best, confident: false };
+  return { index: best, confident: true };
+}
+
+export function buildFromHeaderRow(matrix: unknown[][], headerRow: number): ParsedFile {
+  const headerCells = matrix[headerRow] ?? [];
+  const columns: string[] = [];
+  const usedNames = new Set<string>();
+  headerCells.forEach((cell, index) => {
+    let name = cellText(cell) || `Coluna ${index + 1}`;
+    while (usedNames.has(name)) name = `${name} (${index + 1})`;
+    usedNames.add(name);
+    columns[index] = name;
+  });
+
+  const rows: Record<string, unknown>[] = [];
+  for (let r = headerRow + 1; r < matrix.length; r += 1) {
+    const line = matrix[r] ?? [];
+    if (line.every((c) => cellText(c) === "")) continue;
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      obj[col] = line[i] ?? null;
+    });
+    rows.push(obj);
+  }
+
+  const signature = columns.map((c) => normalize(c)).sort().join("|");
+  const detected = detectHeaderRow(matrix);
+  return { columns, rows, signature, matrix, headerRow, confident: detected.confident };
 }
 
 export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
@@ -14,11 +98,17 @@ export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
   const sheetName = wb.SheetNames[0];
   if (!sheetName) throw new Error("Arquivo sem planilhas legíveis.");
   const sheet = wb.Sheets[sheetName]!;
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: false });
-  const columns = rows.length ? Object.keys(rows[0]!) : [];
-  const signature = columns.map((c) => normalize(c)).sort().join("|");
-  return { columns, rows, signature };
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: null,
+    raw: false,
+    blankrows: false,
+  });
+  if (!matrix.length) throw new Error("O arquivo não contém linhas de dados.");
+  const detected = detectHeaderRow(matrix);
+  return buildFromHeaderRow(matrix, detected.index);
 }
+
 
 const HINTS: Record<StandardField, string[]> = {
   entry_date: ["DATA", "DT", "DT MOVIMENTO", "DATA MOVIMENTO", "COMPETENCIA", "VENCIMENTO", "EMISSAO"],
