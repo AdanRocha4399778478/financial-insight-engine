@@ -100,28 +100,92 @@ export interface DreFactRow {
   period: string;
   period_label: string;
   amount: number;
+  source_row?: number;
+}
+
+export interface DreFactConflict {
+  account_code: string;
+  account_name: string;
+  period: string;
+  period_label: string;
+  values: { amount: number; source_row?: number }[];
+}
+
+export interface DreDedupeResult {
+  facts: DreFactRow[];
+  duplicatesRemoved: number;
+  conflicts: DreFactConflict[];
 }
 
 export interface DreParseResult {
   facts: DreFactRow[];
   accounts: { code: string; name: string }[];
   skipped: number;
+  duplicatesRemoved: number;
+  conflicts: DreFactConflict[];
+}
+
+/** Garante no máximo um fato por (conta, período). Idênticos são removidos; divergentes viram conflito. */
+export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
+  const groups = new Map<string, DreFactRow[]>();
+  const order: string[] = [];
+  for (const fact of facts) {
+    const key = `${fact.account_code}::${fact.period}`;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(fact);
+    else {
+      groups.set(key, [fact]);
+      order.push(key);
+    }
+  }
+
+  const out: DreFactRow[] = [];
+  const conflicts: DreFactConflict[] = [];
+  let duplicatesRemoved = 0;
+
+  for (const key of order) {
+    const bucket = groups.get(key)!;
+    const first = bucket[0]!;
+    if (bucket.length === 1) {
+      out.push(first);
+      continue;
+    }
+    const distinct = [...new Set(bucket.map((f) => round2(f.amount)))];
+    if (distinct.length === 1) {
+      duplicatesRemoved += bucket.length - 1;
+      out.push(first);
+      continue;
+    }
+    conflicts.push({
+      account_code: first.account_code,
+      account_name: first.account_name,
+      period: first.period,
+      period_label: first.period_label,
+      values: bucket.map((f) => ({ amount: f.amount, source_row: f.source_row })),
+    });
+  }
+
+  return { facts: out, duplicatesRemoved, conflicts };
+}
+
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 export function buildDreFacts(
   rows: Record<string, unknown>[],
   structure: DreStructure,
 ): DreParseResult {
-  const facts: DreFactRow[] = [];
+  const raw: DreFactRow[] = [];
   const accounts = new Map<string, string>();
   let skipped = 0;
 
-  for (const row of rows) {
+  rows.forEach((row, index) => {
     const code = String(structure.codeColumn ? (row[structure.codeColumn] ?? "") : "").trim();
     const name = String(structure.nameColumn ? (row[structure.nameColumn] ?? "") : "").trim();
     if (!code && !name) {
       skipped += 1;
-      continue;
+      return;
     }
     const key = code || name;
     let any = false;
@@ -129,21 +193,27 @@ export function buildDreFacts(
       const amount = parseNumber(row[p.column]);
       if (amount === 0) continue;
       any = true;
-      facts.push({
+      raw.push({
         account_code: key.slice(0, 60),
         account_name: (name || code).slice(0, 200),
         period: p.period,
         period_label: p.label.slice(0, 40),
         amount,
+        source_row: index + 1,
       });
     }
     if (any) accounts.set(key.slice(0, 60), (name || code).slice(0, 200));
     else skipped += 1;
-  }
+  });
+
+  const { facts, duplicatesRemoved, conflicts } = dedupeDreFacts(raw);
 
   return {
     facts,
     accounts: [...accounts.entries()].map(([code, name]) => ({ code, name })),
     skipped,
+    duplicatesRemoved,
+    conflicts,
   };
 }
+
