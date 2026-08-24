@@ -40,12 +40,89 @@ function toExistingTrainingExample(row: {
   };
 }
 
+async function loadExisting(
+  supabase: { from: (table: string) => any },
+  clientId: string,
+): Promise<ExistingTrainingExample[]> {
+  const { data, error } = await supabase
+    .from("training_examples")
+    .select("history_key, account, nature, behavior, area, fingerprint")
+    .eq("client_id", clientId)
+    .eq("active", true)
+    .limit(50000);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(toExistingTrainingExample);
+}
+
+function summarizePrepared(
+  rows: TrainingInputRow[],
+  prepared: ReturnType<typeof prepareTrainingBatch>,
+) {
+  return {
+    received: rows.length,
+    ready: prepared.ready.length,
+    duplicatesInBatch: prepared.duplicatesInBatch.length,
+    duplicatesExisting: prepared.duplicatesExisting.length,
+    invalid: prepared.invalid,
+    conflicts: prepared.conflicts.map((conflict) => ({
+      historyKey: conflict.historyKey,
+      reason: conflict.reason,
+      sourceRows: conflict.rows.map((row) => row.sourceRowNumber),
+      classifications: conflict.rows.map((row) => ({
+        account: row.account,
+        nature: row.nature,
+        behavior: row.behavior,
+        area: row.area,
+      })),
+      existing: (conflict.existing ?? []).map((row) => ({
+        account: row.account,
+        nature: row.nature,
+        behavior: row.behavior,
+        area: row.area,
+      })),
+    })),
+  };
+}
+
+export const previewTrainingExamples = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({ clientId: z.string().uuid(), rows: z.array(trainingRowSchema).min(1).max(10000) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const rows = data.rows as TrainingInputRow[];
+    const existing = await loadExisting(context.supabase as never, data.clientId);
+    const prepared = prepareTrainingBatch(data.clientId, rows, existing);
+    return summarizePrepared(rows, prepared);
+  });
+
+export const getTrainingKnowledgeSummary = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ clientId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("training_examples")
+      .select("history_key, account, created_at")
+      .eq("client_id", data.clientId)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(50000);
+    if (error) throw new Error(error.message);
+
+    const accounts = new Set((rows ?? []).map((row) => row.account));
+    const historyKeys = new Set((rows ?? []).map((row) => row.history_key));
+    return {
+      total: rows?.length ?? 0,
+      historyKeys: historyKeys.size,
+      accounts: accounts.size,
+      lastUpdatedAt: rows?.[0]?.created_at ?? null,
+    };
+  });
+
 /**
  * Persistencia controlada do treinamento historico.
- *
- * O servidor sempre recalcula history_key e fingerprint a partir das linhas
- * recebidas. O cliente nao consegue enviar essas identidades prontas.
- * Conflitos e duplicidades sao filtrados antes da escrita.
+ * O servidor recalcula history_key e fingerprint; conflitos e duplicidades
+ * ficam fora da escrita e sao devolvidos no resumo.
  */
 export const importTrainingExamples = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -60,22 +137,9 @@ export const importTrainingExamples = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const supabase = context.supabase;
-
-    const { data: existingRows, error: existingError } = await supabase
-      .from("training_examples")
-      .select("history_key, account, nature, behavior, area, fingerprint")
-      .eq("client_id", data.clientId)
-      .eq("active", true)
-      .limit(50000);
-
-    if (existingError) throw new Error(existingError.message);
-
-    const existing = (existingRows ?? []).map(toExistingTrainingExample);
-    const prepared = prepareTrainingBatch(
-      data.clientId,
-      data.rows as TrainingInputRow[],
-      existing,
-    );
+    const rows = data.rows as TrainingInputRow[];
+    const existing = await loadExisting(supabase as never, data.clientId);
+    const prepared = prepareTrainingBatch(data.clientId, rows, existing);
 
     const payload = prepared.ready.map((row) => ({
       client_id: data.clientId,
@@ -96,34 +160,12 @@ export const importTrainingExamples = createServerFn({ method: "POST" })
     }));
 
     if (payload.length > 0) {
-      const { error: insertError } = await supabase
-        .from("training_examples")
-        .insert(payload);
+      const { error: insertError } = await supabase.from("training_examples").insert(payload);
       if (insertError) throw new Error(insertError.message);
     }
 
     return {
-      received: data.rows.length,
+      ...summarizePrepared(rows, prepared),
       inserted: payload.length,
-      duplicatesInBatch: prepared.duplicatesInBatch.length,
-      duplicatesExisting: prepared.duplicatesExisting.length,
-      invalid: prepared.invalid,
-      conflicts: prepared.conflicts.map((conflict) => ({
-        historyKey: conflict.historyKey,
-        reason: conflict.reason,
-        sourceRows: conflict.rows.map((row) => row.sourceRowNumber),
-        classifications: conflict.rows.map((row) => ({
-          account: row.account,
-          nature: row.nature,
-          behavior: row.behavior,
-          area: row.area,
-        })),
-        existing: (conflict.existing ?? []).map((row) => ({
-          account: row.account,
-          nature: row.nature,
-          behavior: row.behavior,
-          area: row.area,
-        })),
-      })),
     };
   });
