@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_mappings: {
+        Row: {
+          account_code: string
+          account_name: string
+          active: boolean
+          area: string | null
+          behavior: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          nature: Database["public"]["Enums"]["entry_nature"]
+          updated_at: string
+        }
+        Insert: {
+          account_code: string
+          account_name?: string
+          active?: boolean
+          area?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nature?: Database["public"]["Enums"]["entry_nature"]
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string
+          account_name?: string
+          active?: boolean
+          area?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nature?: Database["public"]["Enums"]["entry_nature"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       classification_audit: {
         Row: {
           became_rule: boolean
@@ -165,6 +215,66 @@ export type Database = {
           },
         ]
       }
+      dre_facts: {
+        Row: {
+          account_code: string
+          account_name: string
+          amount: number
+          client_id: string
+          created_at: string
+          fingerprint: string
+          id: string
+          import_id: string | null
+          period: string
+          period_label: string | null
+          raw: Json
+          updated_at: string
+        }
+        Insert: {
+          account_code: string
+          account_name?: string
+          amount?: number
+          client_id: string
+          created_at?: string
+          fingerprint: string
+          id?: string
+          import_id?: string | null
+          period: string
+          period_label?: string | null
+          raw?: Json
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string
+          account_name?: string
+          amount?: number
+          client_id?: string
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          import_id?: string | null
+          period?: string
+          period_label?: string | null
+          raw?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_facts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_facts_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entries: {
         Row: {
           account: string | null
@@ -269,6 +379,7 @@ export type Database = {
           duplicate_rows: number
           filename: string
           id: string
+          kind: string
           mapping: Json | null
           pending_rows: number
           period_label: string | null
@@ -282,6 +393,7 @@ export type Database = {
           duplicate_rows?: number
           filename: string
           id?: string
+          kind?: string
           mapping?: Json | null
           pending_rows?: number
           period_label?: string | null
@@ -295,6 +407,7 @@ export type Database = {
           duplicate_rows?: number
           filename?: string
           id?: string
+          kind?: string
           mapping?: Json | null
           pending_rows?: number
           period_label?: string | null
