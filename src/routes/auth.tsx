@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
+import { googleOAuthCredentials } from "@/lib/google-oauth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +13,15 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Entrar — Resultados S/A" },
-      { name: "description", content: "Acesso da equipe de consultoria à plataforma financeira da Resultados S/A." },
+      {
+        name: "description",
+        content: "Acesso da equipe de consultoria à plataforma financeira da Resultados S/A.",
+      },
       { property: "og:title", content: "Entrar — Resultados S/A" },
-      { property: "og:description", content: "Acesso da equipe de consultoria à plataforma financeira." },
+      {
+        property: "og:description",
+        content: "Acesso da equipe de consultoria à plataforma financeira.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -72,9 +78,7 @@ function AuthPage() {
       navigate({ to: "/clientes" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível concluir.";
-      toast.error(
-        message.includes("Invalid login") ? "E-mail ou senha incorretos." : message,
-      );
+      toast.error(message.includes("Invalid login") ? "E-mail ou senha incorretos." : message);
     } finally {
       setLoading(false);
     }
@@ -82,16 +86,18 @@ function AuthPage() {
 
   const google = async () => {
     setLoading(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth(
+        googleOAuthCredentials(window.location.origin),
+      );
+      if (error) throw error;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível entrar com Google.";
+      toast.error(message);
+    } finally {
       setLoading(false);
-      toast.error("Não foi possível entrar com Google.");
-      return;
     }
-    if (result.redirected) return;
-    navigate({ to: "/clientes" });
   };
 
   return (
@@ -104,9 +110,7 @@ function AuthPage() {
         <h1 className="mt-8 font-display text-2xl font-bold tracking-tight">
           {mode === "login" ? "Entrar na plataforma" : "Criar acesso"}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Área restrita à equipe de consultoria.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">Área restrita à equipe de consultoria.</p>
 
         <Button className="mt-8 w-full" variant="secondary" onClick={google} disabled={loading}>
           Continuar com Google
