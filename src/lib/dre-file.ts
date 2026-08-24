@@ -150,7 +150,7 @@ export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
       out.push(first);
       continue;
     }
-    const distinct = [...new Set(bucket.map((f) => round2(f.amount)))];
+    const distinct = [...new Set(bucket.map((f) => f.amount))];
     if (distinct.length === 1) {
       duplicatesRemoved += bucket.length - 1;
       out.push(first);
@@ -166,10 +166,6 @@ export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
   }
 
   return { facts: out, duplicatesRemoved, conflicts };
-}
-
-function round2(value: number) {
-  return Math.round(value * 100) / 100;
 }
 
 export function buildDreFacts(
