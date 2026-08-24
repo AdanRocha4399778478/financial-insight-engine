@@ -54,23 +54,40 @@ function ImportPage() {
   const [reused, setReused] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const applyParsed = async (result: ParsedFile) => {
+    setParsed(result);
+    const saved = await fetchSaved({ data: { clientId, signature: result.signature } });
+    if (saved) {
+      setMapping(saved as Partial<Record<StandardField, string>>);
+      setReused(true);
+    } else {
+      setMapping(guessMapping(result.columns));
+      setReused(false);
+    }
+  };
+
   const handleFile = async (selected: File) => {
     setBusy(true);
     try {
       const result = await parseSpreadsheet(selected);
       if (!result.rows.length) throw new Error("O arquivo não contém linhas de dados.");
       setFile(selected);
-      setParsed(result);
-      const saved = await fetchSaved({ data: { clientId, signature: result.signature } });
-      if (saved) {
-        setMapping(saved as Partial<Record<StandardField, string>>);
-        setReused(true);
-      } else {
-        setMapping(guessMapping(result.columns));
-        setReused(false);
+      await applyParsed(result);
+      if (!result.confident) {
+        toast.warning("Não foi possível identificar o cabeçalho com segurança. Selecione a linha correta.");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chooseHeaderRow = async (index: number) => {
+    if (!parsed) return;
+    setBusy(true);
+    try {
+      await applyParsed(buildFromHeaderRow(parsed.matrix, index));
     } finally {
       setBusy(false);
     }
@@ -81,6 +98,7 @@ function ImportPage() {
     Boolean(mapping.entry_date) &&
     Boolean(mapping.description) &&
     (Boolean(mapping.amount) || Boolean(mapping.credit) || Boolean(mapping.debit));
+
 
   const send = useMutation({
     mutationFn: async () => {
