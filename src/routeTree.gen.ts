@@ -10,33 +10,160 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedClientesIndexRouteImport } from './routes/_authenticated/clientes.index'
+import { Route as AuthenticatedClientesClientIdRouteImport } from './routes/_authenticated/clientes.$clientId'
+import { Route as AuthenticatedClientesClientIdIndexRouteImport } from './routes/_authenticated/clientes.$clientId.index'
+import { Route as AuthenticatedClientesClientIdClassificacaoRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao'
+import { Route as AuthenticatedClientesClientIdDreRouteImport } from './routes/_authenticated/clientes.$clientId.dre'
+import { Route as AuthenticatedClientesClientIdGovernancaRouteImport } from './routes/_authenticated/clientes.$clientId.governanca'
+import { Route as AuthenticatedClientesClientIdImportarRouteImport } from './routes/_authenticated/clientes.$clientId.importar'
+import { Route as AuthenticatedClientesClientIdIndicadoresRouteImport } from './routes/_authenticated/clientes.$clientId.indicadores'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedClientesIndexRoute =
+  AuthenticatedClientesIndexRouteImport.update({
+    id: '/clientes/',
+    path: '/clientes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedClientesClientIdRoute =
+  AuthenticatedClientesClientIdRouteImport.update({
+    id: '/clientes/$clientId',
+    path: '/clientes/$clientId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedClientesClientIdIndexRoute =
+  AuthenticatedClientesClientIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdClassificacaoRoute =
+  AuthenticatedClientesClientIdClassificacaoRouteImport.update({
+    id: '/classificacao',
+    path: '/classificacao',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdDreRoute =
+  AuthenticatedClientesClientIdDreRouteImport.update({
+    id: '/dre',
+    path: '/dre',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdGovernancaRoute =
+  AuthenticatedClientesClientIdGovernancaRouteImport.update({
+    id: '/governanca',
+    path: '/governanca',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdImportarRoute =
+  AuthenticatedClientesClientIdImportarRouteImport.update({
+    id: '/importar',
+    path: '/importar',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdIndicadoresRoute =
+  AuthenticatedClientesClientIdIndicadoresRouteImport.update({
+    id: '/indicadores',
+    path: '/indicadores',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
+  '/clientes/': typeof AuthenticatedClientesIndexRoute
+  '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
+  '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/clientes': typeof AuthenticatedClientesIndexRoute
+  '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
+  '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/clientes/$clientId': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
+  '/_authenticated/clientes/': typeof AuthenticatedClientesIndexRoute
+  '/_authenticated/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/_authenticated/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
+  '/_authenticated/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
+  '/_authenticated/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
+  '/_authenticated/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/_authenticated/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/clientes/$clientId'
+    | '/clientes/'
+    | '/clientes/$clientId/classificacao'
+    | '/clientes/$clientId/dre'
+    | '/clientes/$clientId/governanca'
+    | '/clientes/$clientId/importar'
+    | '/clientes/$clientId/indicadores'
+    | '/clientes/$clientId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/clientes'
+    | '/clientes/$clientId/classificacao'
+    | '/clientes/$clientId/dre'
+    | '/clientes/$clientId/governanca'
+    | '/clientes/$clientId/importar'
+    | '/clientes/$clientId/indicadores'
+    | '/clientes/$clientId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/clientes/$clientId'
+    | '/_authenticated/clientes/'
+    | '/_authenticated/clientes/$clientId/classificacao'
+    | '/_authenticated/clientes/$clientId/dre'
+    | '/_authenticated/clientes/$clientId/governanca'
+    | '/_authenticated/clientes/$clientId/importar'
+    | '/_authenticated/clientes/$clientId/indicadores'
+    | '/_authenticated/clientes/$clientId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +175,127 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/clientes/': {
+      id: '/_authenticated/clientes/'
+      path: '/clientes'
+      fullPath: '/clientes/'
+      preLoaderRoute: typeof AuthenticatedClientesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/clientes/$clientId': {
+      id: '/_authenticated/clientes/$clientId'
+      path: '/clientes/$clientId'
+      fullPath: '/clientes/$clientId'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/clientes/$clientId/': {
+      id: '/_authenticated/clientes/$clientId/'
+      path: '/'
+      fullPath: '/clientes/$clientId/'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdIndexRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/classificacao': {
+      id: '/_authenticated/clientes/$clientId/classificacao'
+      path: '/classificacao'
+      fullPath: '/clientes/$clientId/classificacao'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdClassificacaoRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/dre': {
+      id: '/_authenticated/clientes/$clientId/dre'
+      path: '/dre'
+      fullPath: '/clientes/$clientId/dre'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdDreRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/governanca': {
+      id: '/_authenticated/clientes/$clientId/governanca'
+      path: '/governanca'
+      fullPath: '/clientes/$clientId/governanca'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdGovernancaRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/importar': {
+      id: '/_authenticated/clientes/$clientId/importar'
+      path: '/importar'
+      fullPath: '/clientes/$clientId/importar'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdImportarRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/indicadores': {
+      id: '/_authenticated/clientes/$clientId/indicadores'
+      path: '/indicadores'
+      fullPath: '/clientes/$clientId/indicadores'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdIndicadoresRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
   }
 }
 
+interface AuthenticatedClientesClientIdRouteChildren {
+  AuthenticatedClientesClientIdClassificacaoRoute: typeof AuthenticatedClientesClientIdClassificacaoRoute
+  AuthenticatedClientesClientIdDreRoute: typeof AuthenticatedClientesClientIdDreRoute
+  AuthenticatedClientesClientIdGovernancaRoute: typeof AuthenticatedClientesClientIdGovernancaRoute
+  AuthenticatedClientesClientIdImportarRoute: typeof AuthenticatedClientesClientIdImportarRoute
+  AuthenticatedClientesClientIdIndicadoresRoute: typeof AuthenticatedClientesClientIdIndicadoresRoute
+  AuthenticatedClientesClientIdIndexRoute: typeof AuthenticatedClientesClientIdIndexRoute
+}
+
+const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdRouteChildren =
+  {
+    AuthenticatedClientesClientIdClassificacaoRoute:
+      AuthenticatedClientesClientIdClassificacaoRoute,
+    AuthenticatedClientesClientIdDreRoute:
+      AuthenticatedClientesClientIdDreRoute,
+    AuthenticatedClientesClientIdGovernancaRoute:
+      AuthenticatedClientesClientIdGovernancaRoute,
+    AuthenticatedClientesClientIdImportarRoute:
+      AuthenticatedClientesClientIdImportarRoute,
+    AuthenticatedClientesClientIdIndicadoresRoute:
+      AuthenticatedClientesClientIdIndicadoresRoute,
+    AuthenticatedClientesClientIdIndexRoute:
+      AuthenticatedClientesClientIdIndexRoute,
+  }
+
+const AuthenticatedClientesClientIdRouteWithChildren =
+  AuthenticatedClientesClientIdRoute._addFileChildren(
+    AuthenticatedClientesClientIdRouteChildren,
+  )
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedClientesClientIdRoute: typeof AuthenticatedClientesClientIdRouteWithChildren
+  AuthenticatedClientesIndexRoute: typeof AuthenticatedClientesIndexRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedClientesClientIdRoute:
+    AuthenticatedClientesClientIdRouteWithChildren,
+  AuthenticatedClientesIndexRoute: AuthenticatedClientesIndexRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
