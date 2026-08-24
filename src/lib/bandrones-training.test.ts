@@ -9,7 +9,7 @@ describe("Bandrones training adapter", () => {
   it("maps the known Bandrones DRE categories explicitly", () => {
     expect(bandronesCategoryMapping("Receita Bruta")).toEqual({
       nature: "receita_bruta",
-      behavior: "variavel",
+      behavior: "nao_aplicavel",
     });
     expect(bandronesCategoryMapping("Despesas Fixas")).toEqual({
       nature: "despesa",
@@ -23,9 +23,13 @@ describe("Bandrones training adapter", () => {
       nature: "excluido",
       behavior: "nao_aplicavel",
     });
+    expect(bandronesCategoryMapping("Crédito de ajuste de contas")).toEqual({
+      nature: "nao_definido",
+      behavior: "nao_definido",
+    });
   });
 
-  it("extracts counterparties embedded in PIX descriptions", () => {
+  it("extracts counterparties embedded in bank descriptions", () => {
     expect(
       counterpartyFromDescription("PIX RECEBIDO REM: RPB REFLORESTAMENTOS  06/04"),
     ).toBe("RPB REFLORESTAMENTOS");
@@ -35,6 +39,9 @@ describe("Bandrones training adapter", () => {
     expect(
       counterpartyFromDescription("PIX QR CODE DINAMICO DES: AUTO POSTO AVIADOR LT 12/05"),
     ).toBe("AUTO POSTO AVIADOR LT");
+    expect(counterpartyFromDescription("COMPRA CARTAO VISA AUTO POSTO AVIADOR L")).toBe(
+      "AUTO POSTO AVIADOR L",
+    );
   });
 
   it("uses the extracted counterparty as the historical identity", () => {
@@ -63,7 +70,7 @@ describe("Bandrones training adapter", () => {
     expect(parsed.rows).toEqual([
       {
         description: "PIX QR CODE DINAMICO DES: AUTO POSTO AVIADOR LT 12/05",
-        counterparty: null,
+        counterparty: "AUTO POSTO AVIADOR LT",
         originalCategory: null,
         account: "Despesas Variáveis",
         nature: "despesa",
@@ -74,7 +81,7 @@ describe("Bandrones training adapter", () => {
     ]);
   });
 
-  it("preserves business context without pretending it is the counterparty", () => {
+  it("preserves business context separately from the extracted counterparty", () => {
     const parsed = parseBandronesTrainingRows([
       {
         Descrição: "PIX ENVIADO DES: ELIAS VIEIRA DOS SANT 15/05",
@@ -84,7 +91,7 @@ describe("Bandrones training adapter", () => {
       },
     ]);
 
-    expect(parsed.rows[0]?.counterparty).toBeNull();
+    expect(parsed.rows[0]?.counterparty).toBe("ELIAS VIEIRA DOS SANT");
     expect(parsed.rows[0]?.originalCategory).toBe("Marketing");
   });
 
