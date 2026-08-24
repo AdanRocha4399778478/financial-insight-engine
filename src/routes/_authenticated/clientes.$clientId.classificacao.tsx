@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles } from "lucide-react";
+import { RefreshCcw, Sparkles } from "lucide-react";
 import {
   classifyEntries,
   confirmSuggestions,
@@ -11,6 +11,7 @@ import {
   listEntries,
   suggestWithAI,
 } from "@/lib/entries.functions";
+import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import {
   AREAS,
   BEHAVIORS,
@@ -81,6 +82,7 @@ function ClassificationPage() {
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
+  const reprocessLearning = useServerFn(reclassifyPendingFromLearning);
 
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
@@ -172,6 +174,17 @@ function ClassificationPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const reprocess = useMutation({
+    mutationFn: () => reprocessLearning({ data: { clientId } }),
+    onSuccess: (r) => {
+      toast.success(
+        `${r.automatic} automático(s), ${r.suggested} sugerido(s), ${r.remaining} ainda pendente(s).`,
+      );
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -194,6 +207,14 @@ function ClassificationPage() {
               : ""}
           </button>
         ))}
+        <Button
+          variant="secondary"
+          onClick={() => reprocess.mutate()}
+          disabled={reprocess.isPending || (summary?.pendente ?? 0) === 0}
+        >
+          <RefreshCcw className={`mr-2 h-4 w-4 ${reprocess.isPending ? "animate-spin" : ""}`} />
+          {reprocess.isPending ? "Reprocessando..." : "Reprocessar com aprendizado"}
+        </Button>
         <Input
           value={search}
           maxLength={120}
