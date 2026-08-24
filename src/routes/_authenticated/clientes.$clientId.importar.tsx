@@ -272,6 +272,24 @@ function ImportPage() {
             ))}
           </div>
 
+          {dreResult.conflicts.length > 0 && (
+            <div className="mt-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <p className="font-display text-sm font-semibold">
+                Importação bloqueada: mesma conta e período com valores diferentes
+              </p>
+              <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                {dreResult.conflicts.slice(0, 20).map((c) => (
+                  <li key={`${c.account_code}-${c.period}`} className="font-mono">
+                    {c.account_code} · {c.account_name} · {c.period_label}:{" "}
+                    {c.values
+                      .map((v) => (v.source_row ? `linha ${v.source_row} = ${brl(v.amount)}` : brl(v.amount)))
+                      .join("  vs  ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="mt-6 overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-left text-xs">
               <thead className="bg-muted/50 font-mono uppercase tracking-wider text-muted-foreground">
@@ -517,6 +535,8 @@ function ImportPage() {
               { label: "Linhas lidas", value: String(parsed.rows.length) },
               { label: "Contas com valor", value: String(dreResult.accounts.length) },
               { label: "Valores por período", value: String(dreResult.facts.length) },
+              { label: "Duplicatas idênticas removidas", value: String(dreResult.duplicatesRemoved) },
+              { label: "Conflitos de valor", value: String(dreResult.conflicts.length) },
             ].map((item) => (
               <div key={item.label} className="rounded-lg border border-border p-4">
                 <p className="font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
@@ -568,7 +588,9 @@ function ImportPage() {
           <Button
             className="mt-8"
             size="lg"
-            disabled={sendDre.isPending || dreResult.facts.length === 0}
+            disabled={
+              sendDre.isPending || dreResult.facts.length === 0 || dreResult.conflicts.length > 0
+            }
             onClick={() => sendDre.mutate()}
           >
             {sendDre.isPending ? "Processando..." : "Importar DRE pronta"}
