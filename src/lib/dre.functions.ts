@@ -43,8 +43,52 @@ export const getDreData = createServerFn({ method: "GET" })
       .not("cost_center", "is", null)
       .limit(5000);
 
+    // Importações tipo "DRE pronta": contas já mapeadas ao Plano Gerencial entram na DRE.
+    const { data: facts } = await context.supabase
+      .from("dre_facts")
+      .select("period, amount, account_code, account_name")
+      .eq("client_id", data.clientId)
+      .gte("period", data.from)
+      .lte("period", data.to)
+      .limit(50000);
+
+    const { data: maps } = await context.supabase
+      .from("account_mappings")
+      .select("account_code, account_name, nature, behavior, area, active")
+      .eq("client_id", data.clientId)
+      .limit(20000);
+
+    const mapByCode = new Map((maps ?? []).map((m) => [m.account_code, m]));
+    const factRows = (facts ?? []).flatMap((f) => {
+      const m = mapByCode.get(f.account_code);
+      if (!m || !m.active || m.nature === "nao_definido") return [];
+      return [
+        {
+          entry_date: f.period,
+          amount: Number(f.amount),
+          nature: m.nature,
+          behavior: m.behavior,
+          account: m.account_name || f.account_name,
+          area: m.area,
+          excluded_from_dre: false,
+          status: "confirmado" as const,
+          cost_center: null as string | null,
+        },
+      ];
+    });
+
+    const unmappedAccounts = new Set(
+      (facts ?? [])
+        .filter((f) => {
+          const m = mapByCode.get(f.account_code);
+          return !m || m.nature === "nao_definido";
+        })
+        .map((f) => f.account_code),
+    ).size;
+
     return {
-      rows: rows ?? [],
+      rows: [...(rows ?? []), ...factRows],
+      unmappedAccounts,
       pendingCount: pendingRows?.length ?? 0,
       dimensions: [...new Set((dimensionRows ?? []).map((d) => d.cost_center!).filter(Boolean))].sort(),
     };
