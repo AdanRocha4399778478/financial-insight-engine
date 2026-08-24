@@ -178,11 +178,30 @@ function ClientsPage() {
           </Dialog>
         </div>
 
-        {clients.isLoading && (
+        {clients.isPending && !clients.isError && (
           <p className="mt-10 text-sm text-muted-foreground">Carregando carteira...</p>
         )}
 
-        {clients.data?.length === 0 && (
+        {clients.isError && (
+          <div className="mt-10 rounded-lg border border-destructive/40 bg-destructive/5 p-8 text-center">
+            <p className="text-sm font-medium text-foreground">
+              Não foi possível carregar a carteira de clientes.
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {(clients.error as Error)?.message ?? "Erro desconhecido."}
+            </p>
+            <Button
+              variant="outline"
+              className="mt-6"
+              onClick={() => clients.refetch()}
+              disabled={clients.isFetching}
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        )}
+
+        {!clients.isError && clients.data?.length === 0 && (
           <div className="mt-10 rounded-lg border border-dashed border-border p-12 text-center">
             <Building2 className="mx-auto h-6 w-6 text-muted-foreground" />
             <p className="mt-4 text-sm text-muted-foreground">
