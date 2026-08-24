@@ -183,35 +183,107 @@ export interface NormalizedRow {
   raw: Record<string, unknown>;
 }
 
+export interface NormalizeSummary {
+  read: number;
+  valid: number;
+  discarded: number;
+  discardedNoMovement: number;
+  discardedRepeatedHeader: number;
+  discardedInvalid: number;
+  creditCount: number;
+  creditTotal: number;
+  debitCount: number;
+  debitTotal: number;
+  net: number;
+  balanceRows: { description: string; value: number }[];
+}
+
+/** Uma linha do conteúdo que repete os nomes de colunas do cabeçalho não é lançamento. */
+export function isRepeatedHeader(row: Record<string, unknown>): boolean {
+  const values = Object.values(row)
+    .map((v) => (v === null || v === undefined ? "" : String(v).trim()))
+    .filter((v) => v !== "");
+  if (values.length < 2) return false;
+  let hits = 0;
+  for (const value of values) {
+    const n = normalize(value);
+    if (!n) continue;
+    if (HEADER_TOKENS.some((t) => n === t)) hits += 1;
+  }
+  return hits >= 2 && hits >= Math.ceil(values.length / 2);
+}
+
 export function normalizeRows(
   rows: Record<string, unknown>[],
   mapping: Partial<Record<StandardField, string>>,
-): { valid: NormalizedRow[]; invalid: number } {
+): { valid: NormalizedRow[]; invalid: number; summary: NormalizeSummary } {
   const valid: NormalizedRow[] = [];
-  let invalid = 0;
+  const summary: NormalizeSummary = {
+    read: rows.length,
+    valid: 0,
+    discarded: 0,
+    discardedNoMovement: 0,
+    discardedRepeatedHeader: 0,
+    discardedInvalid: 0,
+    creditCount: 0,
+    creditTotal: 0,
+    debitCount: 0,
+    debitTotal: 0,
+    net: 0,
+    balanceRows: [],
+  };
+
   const pick = (row: Record<string, unknown>, field: StandardField) => {
     const col = mapping[field];
     return col ? row[col] : null;
   };
 
   for (const row of rows) {
-    const date = parseDate(pick(row, "entry_date"));
-    let amount = parseNumber(pick(row, "amount"));
-    if (!mapping.amount) {
-      const credit = parseNumber(pick(row, "credit"));
-      const debit = parseNumber(pick(row, "debit"));
-      amount = credit !== 0 ? credit : -Math.abs(debit);
-    }
-    const description = String(pick(row, "description") ?? "").trim();
-    if (!date || (!description && amount === 0)) {
-      invalid += 1;
+    if (isRepeatedHeader(row)) {
+      summary.discardedRepeatedHeader += 1;
       continue;
     }
+
+    const date = parseDate(pick(row, "entry_date"));
+    const description = String(pick(row, "description") ?? "").trim();
+
+    const credit = mapping.credit ? parseNumber(pick(row, "credit")) : 0;
+    const debit = mapping.debit ? parseNumber(pick(row, "debit")) : 0;
+    const single = mapping.amount ? parseNumber(pick(row, "amount")) : 0;
+
+    let amount = 0;
+    if (credit !== 0 || debit !== 0) amount = credit !== 0 ? credit : -Math.abs(debit);
+    else amount = single;
+
+    // Regra principal: sem movimento financeiro (crédito, débito ou valor) não é lançamento.
+    if (amount === 0) {
+      summary.discardedNoMovement += 1;
+      if (description) {
+        const balance = parseNumber(row[Object.keys(row)[Object.keys(row).length - 1] ?? ""]);
+        if (balance !== 0) summary.balanceRows.push({ description, value: balance });
+      }
+      continue;
+    }
+
+    if (!date) {
+      summary.discardedInvalid += 1;
+      continue;
+    }
+
     const str = (f: StandardField) => {
       const v = pick(row, f);
       const s = v === null || v === undefined ? "" : String(v).trim();
       return s === "" ? null : s;
     };
+
+    if (amount > 0) {
+      summary.creditCount += 1;
+      summary.creditTotal += amount;
+    } else {
+      summary.debitCount += 1;
+      summary.debitTotal += Math.abs(amount);
+    }
+
     valid.push({
       entry_date: date,
       description: description || "(sem descrição)",
@@ -224,5 +296,11 @@ export function normalizeRows(
       raw: row,
     });
   }
-  return { valid, invalid };
+
+  summary.valid = valid.length;
+  summary.discarded =
+    summary.discardedNoMovement + summary.discardedRepeatedHeader + summary.discardedInvalid;
+  summary.net = summary.creditTotal - summary.debitTotal;
+  return { valid, invalid: summary.discarded, summary };
 }
+
