@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId")({
 const tabs: { to: string; label: string; exact?: boolean }[] = [
   { to: "/clientes/$clientId", label: "Visão geral", exact: true },
   { to: "/clientes/$clientId/importar", label: "Importar" },
+  { to: "/clientes/$clientId/treinamento", label: "Treinamento" },
   { to: "/clientes/$clientId/classificacao", label: "Classificação" },
   { to: "/clientes/$clientId/contas", label: "Contas" },
   { to: "/clientes/$clientId/dre", label: "DRE" },
