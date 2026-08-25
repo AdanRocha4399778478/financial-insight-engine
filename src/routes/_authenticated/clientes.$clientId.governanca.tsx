@@ -62,6 +62,7 @@ function GovernancePage() {
   const { clientId } = Route.useParams();
   const queryClient = useQueryClient();
   const [rulesExpanded, setRulesExpanded] = useState(false);
+  const [auditExpanded, setAuditExpanded] = useState(false);
 
   const fetchRules = useServerFn(listRules);
   const toggleRule = useServerFn(setRuleActive);
@@ -117,6 +118,8 @@ function GovernancePage() {
   const activeRules = rules.data?.filter((rule) => rule.active).length ?? 0;
   const confirmedRules = rules.data?.filter((rule) => rule.confirmed).length ?? 0;
   const inactiveRules = totalRules - activeRules;
+  const auditRows = audit.data ?? [];
+  const visibleAuditRows = auditExpanded ? auditRows.slice(0, 50) : auditRows.slice(0, 5);
 
   return (
     <div className="space-y-10">
@@ -294,9 +297,24 @@ function GovernancePage() {
       </section>
 
       <section>
-        <h2 className="font-display text-lg font-semibold">Trilha de auditoria</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-lg font-semibold">Trilha de auditoria</h2>
+              {auditRows.length > 0 && <Badge variant="outline">{auditRows.length} registros recentes</Badge>}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Mostrando {Math.min(visibleAuditRows.length, 5)} alterações recentes. Expanda apenas quando precisar investigar o histórico.
+            </p>
+          </div>
+          {auditRows.length > 5 && (
+            <Button variant="outline" size="sm" onClick={() => setAuditExpanded((value) => !value)}>
+              {auditExpanded ? "Recolher histórico" : `Ver mais ${Math.min(auditRows.length, 50) - 5}`}
+            </Button>
+          )}
+        </div>
         <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
-          {audit.data?.slice(0, 50).map((item) => {
+          {visibleAuditRows.map((item) => {
             const next = item.next as { account?: string; nature?: string } | null;
             const previous = item.previous as { account?: string | null } | null;
             return (
@@ -312,7 +330,7 @@ function GovernancePage() {
               </div>
             );
           })}
-          {audit.data?.length === 0 && (
+          {auditRows.length === 0 && (
             <p className="bg-card p-8 text-center text-sm text-muted-foreground">
               Nenhuma alteração registrada ainda.
             </p>
