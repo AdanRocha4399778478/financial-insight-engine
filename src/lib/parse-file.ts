@@ -32,6 +32,22 @@ const HEADER_TOKENS = [
   "MONTANTE",
 ];
 
+const BALANCE_DESCRIPTIONS = [
+  "SALDO",
+  "SALDO DO DIA",
+  "SALDO ANTERIOR",
+  "SALDO ATUAL",
+  "SALDO FINAL",
+  "SALDO INICIAL",
+  "SALDO DISPONIVEL",
+  "SALDO CONTA",
+  "SALDO DA CONTA",
+  "SALDO EM CONTA",
+  "SALDO BLOQUEADO",
+  "SALDO APLICACAO",
+  "SALDO APLICACOES",
+];
+
 const cellText = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
 
 function scoreRow(row: unknown[]): number {
@@ -101,8 +117,6 @@ export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     defval: null,
-    // Preserva Date e number do XLS/XLSX. raw:false aplicava a máscara visual da
-    // planilha e podia transformar 30/04/2026 em "2026-30-04".
     raw: true,
     blankrows: false,
   });
@@ -188,8 +202,6 @@ export function parseDate(value: unknown): string | null {
     const third = Number(iso[3]);
     const normal = isoDate(year, second, third);
     if (normal) return normal;
-    // Recupera exportações cuja máscara veio como YYYY-DD-MM, sem aceitar uma
-    // data impossível silenciosamente.
     return isoDate(year, third, second);
   }
 
@@ -217,6 +229,7 @@ export interface NormalizeSummary {
   valid: number;
   discarded: number;
   discardedNoMovement: number;
+  discardedBalance: number;
   discardedRepeatedHeader: number;
   discardedInvalid: number;
   creditCount: number;
@@ -227,7 +240,6 @@ export interface NormalizeSummary {
   balanceRows: { description: string; value: number }[];
 }
 
-/** Uma linha do conteúdo que repete os nomes de colunas do cabeçalho não é lançamento. */
 export function isRepeatedHeader(row: Record<string, unknown>): boolean {
   const values = Object.values(row)
     .map((v) => (v === null || v === undefined ? "" : String(v).trim()))
@@ -240,6 +252,13 @@ export function isRepeatedHeader(row: Record<string, unknown>): boolean {
     if (HEADER_TOKENS.some((t) => n === t)) hits += 1;
   }
   return hits >= 2 && hits >= Math.ceil(values.length / 2);
+}
+
+export function isBalanceDescription(description: string): boolean {
+  const n = normalize(description);
+  if (!n) return false;
+  if (BALANCE_DESCRIPTIONS.includes(n)) return true;
+  return /^SALDO\b/.test(n) && !/MOVIMENT|TRANSFER|RESGATE|APLICACAO AUTOMATICA/.test(n);
 }
 
 function movementDirection(value: string | null): "credit" | "debit" | null {
@@ -283,6 +302,7 @@ export function normalizeRows(
     valid: 0,
     discarded: 0,
     discardedNoMovement: 0,
+    discardedBalance: 0,
     discardedRepeatedHeader: 0,
     discardedInvalid: 0,
     creditCount: 0,
@@ -325,7 +345,12 @@ export function normalizeRows(
       }
     }
 
-    // Regra principal: sem movimento financeiro (crédito, débito ou valor) não é lançamento.
+    if (isBalanceDescription(description)) {
+      summary.discardedBalance += 1;
+      if (amount !== 0) summary.balanceRows.push({ description, value: amount });
+      continue;
+    }
+
     if (amount === 0) {
       summary.discardedNoMovement += 1;
       if (description) {
@@ -363,7 +388,7 @@ export function normalizeRows(
 
   summary.valid = valid.length;
   summary.discarded =
-    summary.discardedNoMovement + summary.discardedRepeatedHeader + summary.discardedInvalid;
+    summary.discardedNoMovement + summary.discardedBalance + summary.discardedRepeatedHeader + summary.discardedInvalid;
   summary.net = summary.creditTotal - summary.debitTotal;
   return { valid, invalid: summary.discarded, summary };
 }
