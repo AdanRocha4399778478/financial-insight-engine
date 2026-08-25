@@ -1,3 +1,5 @@
+import { normalize } from "./classify";
+
 export type ImportBalanceIntegrityStatus = "conciliado" | "divergente" | "nao_verificado";
 
 export interface ImportBalanceIntegrityInput {
@@ -16,12 +18,58 @@ export interface ImportBalanceIntegrityResult {
   tolerance: number;
 }
 
+export interface BalanceRowLike {
+  description: string;
+  value: number;
+}
+
+export interface InferredStatementBalances {
+  openingBalance: number | null;
+  closingBalance: number | null;
+  openingSource: string | null;
+  closingSource: string | null;
+}
+
 function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function isFiniteNumber(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
+}
+
+function isOpeningBalanceDescription(description: string): boolean {
+  const value = normalize(description);
+  return /\bSALDO (ANTERIOR|INICIAL)\b/.test(value);
+}
+
+function isExplicitClosingBalanceDescription(description: string): boolean {
+  const value = normalize(description);
+  return /\bSALDO (FINAL|ATUAL|DISPONIVEL)\b/.test(value);
+}
+
+function isDailyBalanceDescription(description: string): boolean {
+  return /\bSALDO DO DIA\b/.test(normalize(description));
+}
+
+export function inferStatementBalances(balanceRows: BalanceRowLike[]): InferredStatementBalances {
+  const validRows = balanceRows.filter((row) => Number.isFinite(row.value));
+  const openingRow = validRows.find((row) => isOpeningBalanceDescription(row.description)) ?? null;
+  const explicitClosingRows = validRows.filter((row) => isExplicitClosingBalanceDescription(row.description));
+  const explicitClosingRow = explicitClosingRows.at(-1) ?? null;
+
+  let closingRow = explicitClosingRow;
+  if (!closingRow && openingRow) {
+    const dailyRows = validRows.filter((row) => isDailyBalanceDescription(row.description));
+    closingRow = dailyRows.at(-1) ?? null;
+  }
+
+  return {
+    openingBalance: openingRow ? roundCurrency(openingRow.value) : null,
+    closingBalance: closingRow ? roundCurrency(closingRow.value) : null,
+    openingSource: openingRow?.description ?? null,
+    closingSource: closingRow?.description ?? null,
+  };
 }
 
 export function calculateImportBalanceIntegrity(
