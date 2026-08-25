@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calculateImportBalanceIntegrity } from "./import-balance-integrity";
+import {
+  calculateImportBalanceIntegrity,
+  inferStatementBalances,
+} from "./import-balance-integrity";
 
 describe("import balance integrity", () => {
   it("marks reconciled when calculated balance matches closing balance", () => {
@@ -52,5 +55,35 @@ describe("import balance integrity", () => {
     expect(result.status).toBe("nao_verificado");
     expect(result.calculatedBalance).toBeNull();
     expect(result.difference).toBeNull();
+  });
+});
+
+describe("statement balance inference", () => {
+  it("uses explicit opening and closing labels", () => {
+    expect(
+      inferStatementBalances([
+        { description: "Saldo anterior", value: 1000 },
+        { description: "Saldo final", value: 1250 },
+      ]),
+    ).toMatchObject({ openingBalance: 1000, closingBalance: 1250 });
+  });
+
+  it("uses the last daily balance as closing only when an opening balance exists", () => {
+    expect(
+      inferStatementBalances([
+        { description: "SALDO INICIAL", value: 1000 },
+        { description: "SALDO DO DIA", value: 1100 },
+        { description: "SALDO DO DIA", value: 1250 },
+      ]),
+    ).toMatchObject({ openingBalance: 1000, closingBalance: 1250 });
+  });
+
+  it("does not guess from ambiguous balance rows", () => {
+    expect(
+      inferStatementBalances([
+        { description: "SALDO", value: 1000 },
+        { description: "SALDO", value: 1250 },
+      ]),
+    ).toMatchObject({ openingBalance: null, closingBalance: null });
   });
 });
