@@ -52,6 +52,23 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/importa
 const NONE = "__none__";
 type Mode = "movimentos" | "dre";
 
+function parseManualBalance(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed.replace(/[R$\s]/g, "");
+  const negative = /^\(.*\)$/.test(normalized) || normalized.startsWith("-");
+  normalized = normalized.replace(/[()\-]/g, "");
+
+  if (normalized.includes(",")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  }
+
+  const parsed = Number(normalized.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(parsed)) return null;
+  return negative ? -parsed : parsed;
+}
+
 function ImportPage() {
   const { clientId } = Route.useParams();
   const navigate = useNavigate();
@@ -69,6 +86,8 @@ function ImportPage() {
   const [allowDuplicates, setAllowDuplicates] = useState(false);
   const [reused, setReused] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [manualOpeningBalance, setManualOpeningBalance] = useState("");
+  const [manualClosingBalance, setManualClosingBalance] = useState("");
 
   const applyParsed = async (result: ParsedFile, currentMode: Mode) => {
     setParsed(result);
@@ -93,6 +112,8 @@ function ImportPage() {
       const result = await parseSpreadsheet(selected);
       if (!result.rows.length) throw new Error("O arquivo não contém linhas de dados.");
       setFile(selected);
+      setManualOpeningBalance("");
+      setManualClosingBalance("");
       await applyParsed(result, mode);
       if (!result.confident) {
         toast.warning("Não foi possível identificar o cabeçalho com segurança. Selecione a linha correta.");
@@ -128,14 +149,45 @@ function ImportPage() {
   const inferredBalances = normalized
     ? inferStatementBalances(normalized.summary.balanceRows)
     : null;
-  const balanceIntegrity = normalized && inferredBalances
+  const manualOpeningValue = parseManualBalance(manualOpeningBalance);
+  const manualClosingValue = parseManualBalance(manualClosingBalance);
+  const openingFromRunningBalance = Boolean(inferredBalances?.openingSource?.includes("COLUNA SALDO"));
+  const closingFromRunningBalance = Boolean(inferredBalances?.closingSource?.includes("COLUNA SALDO"));
+  const effectiveOpeningBalance = manualOpeningValue ?? inferredBalances?.openingBalance ?? null;
+  const effectiveClosingBalance = manualClosingValue ?? inferredBalances?.closingBalance ?? null;
+  const openingIndependent = manualOpeningValue !== null || Boolean(inferredBalances?.openingSource && !openingFromRunningBalance);
+  const closingIndependent = manualClosingValue !== null || Boolean(inferredBalances?.closingSource && !closingFromRunningBalance);
+
+  const balanceIntegrity = normalized
     ? calculateImportBalanceIntegrity({
-        openingBalance: inferredBalances.openingBalance,
-        closingBalance: inferredBalances.closingBalance,
+        openingBalance: effectiveOpeningBalance,
+        closingBalance: effectiveClosingBalance,
         creditTotal: normalized.summary.creditTotal,
         debitTotal: normalized.summary.debitTotal,
+        openingIndependent,
+        closingIndependent,
       })
     : null;
+
+  const openingSourceLabel = manualOpeningValue !== null
+    ? "Informado manualmente"
+    : balanceIntegrity?.openingBalance !== null && inferredBalances?.openingBalance === null
+      ? "Inferido matematicamente"
+      : openingFromRunningBalance
+        ? "Inferido matematicamente pela coluna de saldo"
+        : inferredBalances?.openingSource
+          ? "Detectado no extrato"
+          : "Não identificado";
+
+  const closingSourceLabel = manualClosingValue !== null
+    ? "Informado manualmente"
+    : balanceIntegrity?.closingBalance !== null && inferredBalances?.closingBalance === null
+      ? "Inferido matematicamente"
+      : closingFromRunningBalance
+        ? "Detectado no extrato pela coluna de saldo"
+        : inferredBalances?.closingSource
+          ? "Detectado no extrato"
+          : "Não identificado";
 
   const dreResult = useMemo(
     () => (parsed && mode === "dre" && structure ? buildDreFacts(parsed.rows, structure) : null),
@@ -411,7 +463,7 @@ function ImportPage() {
                 <div>
                   <h3 className="font-display text-base font-semibold">Integridade da importação</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Conferência matemática entre os saldos do extrato e os movimentos normalizados.
+                    Confira os saldos antes de considerar a base validada. Valores informados manualmente têm prioridade sobre o extrato e sobre inferências matemáticas.
                   </p>
                 </div>
                 <Badge
@@ -427,29 +479,64 @@ function ImportPage() {
                     ? "CONCILIADO"
                     : balanceIntegrity.status === "divergente"
                       ? "DIVERGENTE"
-                      : "NÃO VERIFICADO"}
+                      : balanceIntegrity.status === "fechamento_inferido"
+                        ? "FECHAMENTO INFERIDO"
+                        : "NÃO VERIFICADO"}
                 </Badge>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="manual-opening-balance">Saldo inicial informado (opcional)</Label>
+                  <Input
+                    id="manual-opening-balance"
+                    inputMode="decimal"
+                    placeholder="Ex.: 1.250,30"
+                    value={manualOpeningBalance}
+                    onChange={(event) => setManualOpeningBalance(event.target.value)}
+                  />
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    Use quando você tiver um saldo de abertura independente do arquivo importado.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-closing-balance">Saldo final informado (opcional)</Label>
+                  <Input
+                    id="manual-closing-balance"
+                    inputMode="decimal"
+                    placeholder="Ex.: 1.589,73"
+                    value={manualClosingBalance}
+                    onChange={(event) => setManualClosingBalance(event.target.value)}
+                  />
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    Use quando você tiver um saldo de fechamento independente do arquivo importado.
+                  </p>
+                </div>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                 {[
                   {
                     label: "Saldo inicial",
-                    value: inferredBalances.openingBalance === null ? "—" : brl(inferredBalances.openingBalance),
+                    value: balanceIntegrity.openingBalance === null ? "—" : brl(balanceIntegrity.openingBalance),
+                    source: openingSourceLabel,
                   },
-                  { label: "Entradas", value: brl(normalized.summary.creditTotal) },
-                  { label: "Saídas", value: brl(normalized.summary.debitTotal) },
+                  { label: "Entradas", value: brl(normalized.summary.creditTotal), source: "Movimentos normalizados" },
+                  { label: "Saídas", value: brl(normalized.summary.debitTotal), source: "Movimentos normalizados" },
                   {
                     label: "Saldo calculado",
                     value: balanceIntegrity.calculatedBalance === null ? "—" : brl(balanceIntegrity.calculatedBalance),
+                    source: "Cálculo da importação",
                   },
                   {
-                    label: "Saldo final do banco",
-                    value: inferredBalances.closingBalance === null ? "—" : brl(inferredBalances.closingBalance),
+                    label: "Saldo final",
+                    value: balanceIntegrity.closingBalance === null ? "—" : brl(balanceIntegrity.closingBalance),
+                    source: closingSourceLabel,
                   },
                   {
                     label: "Diferença",
                     value: balanceIntegrity.difference === null ? "—" : brl(balanceIntegrity.difference),
+                    source: balanceIntegrity.status === "fechamento_inferido" ? "Não aplicável à conciliação" : "Banco menos calculado",
                   },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border border-border bg-card p-4">
@@ -457,14 +544,26 @@ function ImportPage() {
                       {item.label}
                     </p>
                     <p className="mt-2 font-display text-sm font-semibold">{item.value}</p>
+                    <p className="mt-2 text-[0.65rem] leading-relaxed text-muted-foreground">{item.source}</p>
                   </div>
                 ))}
               </div>
 
+              {balanceIntegrity.status === "conciliado" && (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Os saldos inicial e final são independentes e a movimentação fecha dentro da tolerância de {brl(balanceIntegrity.tolerance)}.
+                </p>
+              )}
+
+              {balanceIntegrity.status === "fechamento_inferido" && (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  A equação fecha porque pelo menos um dos saldos foi reconstruído matematicamente. Isso é uma conferência útil, mas não equivale a uma conciliação bancária independente.
+                </p>
+              )}
+
               {balanceIntegrity.status === "nao_verificado" && (
                 <p className="mt-4 text-xs text-muted-foreground">
-                  Não encontramos saldo inicial e saldo final com descrição suficientemente segura no arquivo.
-                  A importação continua disponível, mas não será considerada matematicamente verificada nesta etapa.
+                  Não há evidência suficiente para determinar os dois saldos com segurança. Informe os saldos manualmente ou utilize um extrato com saldos identificáveis para realizar a conferência.
                 </p>
               )}
 
@@ -477,8 +576,8 @@ function ImportPage() {
 
               {(inferredBalances.openingSource || inferredBalances.closingSource) && (
                 <p className="mt-3 text-[0.7rem] text-muted-foreground">
-                  Saldos detectados no arquivo: inicial {inferredBalances.openingSource ?? "não identificado"} · final{" "}
-                  {inferredBalances.closingSource ?? "não identificado"}.
+                  Evidência encontrada no arquivo: inicial {inferredBalances.openingSource ?? "não identificada"} · final{" "}
+                  {inferredBalances.closingSource ?? "não identificada"}.
                 </p>
               )}
             </div>
