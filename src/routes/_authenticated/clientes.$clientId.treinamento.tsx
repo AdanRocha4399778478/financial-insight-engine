@@ -93,16 +93,29 @@ function TrainingPage() {
     try {
       const parsedFile = await parseSpreadsheet(selected);
       const detectedFormat = detectTrainingFormat(parsedFile.rows);
-      const parsedTraining = detectedFormat === "erinho"
-        ? parseErinhoTrainingRows(parsedFile.rows)
-        : parseBandronesTrainingRows(parsedFile.rows);
-      if (!parsedTraining.rows.length) throw new Error("Nenhuma linha válida de treinamento foi encontrada.");
+
+      let parsedRows: TrainingInputRow[];
+      let parsedRejected: RejectedRow[];
+      let parsedWarnings: ErinhoTrainingWarning[] = [];
+
+      if (detectedFormat === "erinho") {
+        const parsedTraining = parseErinhoTrainingRows(parsedFile.rows);
+        parsedRows = parsedTraining.rows;
+        parsedRejected = parsedTraining.rejected;
+        parsedWarnings = parsedTraining.warnings;
+      } else {
+        const parsedTraining = parseBandronesTrainingRows(parsedFile.rows);
+        parsedRows = parsedTraining.rows;
+        parsedRejected = parsedTraining.rejected;
+      }
+
+      if (!parsedRows.length) throw new Error("Nenhuma linha válida de treinamento foi encontrada.");
       setFile(selected);
       setFormat(detectedFormat);
-      setRows(parsedTraining.rows);
-      setRejected(parsedTraining.rejected);
-      setSemanticWarnings(detectedFormat === "erinho" ? parsedTraining.warnings : []);
-      await Promise.all([previewMutation.mutateAsync(parsedTraining.rows), coverageMutation.mutateAsync(parsedTraining.rows)]);
+      setRows(parsedRows);
+      setRejected(parsedRejected);
+      setSemanticWarnings(parsedWarnings);
+      await Promise.all([previewMutation.mutateAsync(parsedRows), coverageMutation.mutateAsync(parsedRows)]);
     } catch (error) {
       setFile(null);
       setFormat(null);
