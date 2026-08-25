@@ -12,6 +12,10 @@ import {
   parseSpreadsheet,
   type ParsedFile,
 } from "@/lib/parse-file";
+import {
+  calculateImportBalanceIntegrity,
+  inferStatementBalances,
+} from "@/lib/import-balance-integrity";
 import { buildDreFacts, detectDreStructure, type DreStructure } from "@/lib/dre-file";
 import { commitImport, getSavedMapping } from "@/lib/imports.functions";
 import { commitDreImport } from "@/lib/dre-import.functions";
@@ -120,6 +124,18 @@ function ImportPage() {
     Boolean(mapping.entry_date) &&
     Boolean(mapping.description) &&
     (Boolean(mapping.amount) || Boolean(mapping.credit) || Boolean(mapping.debit));
+
+  const inferredBalances = normalized
+    ? inferStatementBalances(normalized.summary.balanceRows)
+    : null;
+  const balanceIntegrity = normalized && inferredBalances
+    ? calculateImportBalanceIntegrity({
+        openingBalance: inferredBalances.openingBalance,
+        closingBalance: inferredBalances.closingBalance,
+        creditTotal: normalized.summary.creditTotal,
+        debitTotal: normalized.summary.debitTotal,
+      })
+    : null;
 
   const dreResult = useMemo(
     () => (parsed && mode === "dre" && structure ? buildDreFacts(parsed.rows, structure) : null),
@@ -384,9 +400,89 @@ function ImportPage() {
 
           <p className="mt-3 text-xs text-muted-foreground">
             Descartes: {normalized.summary.discardedNoMovement} sem movimento ·{" "}
+            {normalized.summary.discardedBalance} linhas de saldo ·{" "}
             {normalized.summary.discardedRepeatedHeader} cabeçalhos repetidos ·{" "}
             {normalized.summary.discardedInvalid} sem data válida
           </p>
+
+          {balanceIntegrity && inferredBalances && (
+            <div className="mt-6 rounded-lg border border-border bg-muted/20 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-base font-semibold">Integridade da importação</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Conferência matemática entre os saldos do extrato e os movimentos normalizados.
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    balanceIntegrity.status === "conciliado"
+                      ? "default"
+                      : balanceIntegrity.status === "divergente"
+                        ? "destructive"
+                        : "outline"
+                  }
+                >
+                  {balanceIntegrity.status === "conciliado"
+                    ? "CONCILIADO"
+                    : balanceIntegrity.status === "divergente"
+                      ? "DIVERGENTE"
+                      : "NÃO VERIFICADO"}
+                </Badge>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                {[
+                  {
+                    label: "Saldo inicial",
+                    value: inferredBalances.openingBalance === null ? "—" : brl(inferredBalances.openingBalance),
+                  },
+                  { label: "Entradas", value: brl(normalized.summary.creditTotal) },
+                  { label: "Saídas", value: brl(normalized.summary.debitTotal) },
+                  {
+                    label: "Saldo calculado",
+                    value: balanceIntegrity.calculatedBalance === null ? "—" : brl(balanceIntegrity.calculatedBalance),
+                  },
+                  {
+                    label: "Saldo final do banco",
+                    value: inferredBalances.closingBalance === null ? "—" : brl(inferredBalances.closingBalance),
+                  },
+                  {
+                    label: "Diferença",
+                    value: balanceIntegrity.difference === null ? "—" : brl(balanceIntegrity.difference),
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border border-border bg-card p-4">
+                    <p className="font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
+                      {item.label}
+                    </p>
+                    <p className="mt-2 font-display text-sm font-semibold">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {balanceIntegrity.status === "nao_verificado" && (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Não encontramos saldo inicial e saldo final com descrição suficientemente segura no arquivo.
+                  A importação continua disponível, mas não será considerada matematicamente verificada nesta etapa.
+                </p>
+              )}
+
+              {balanceIntegrity.status === "divergente" && (
+                <p className="mt-4 text-xs text-destructive">
+                  A diferença supera a tolerância de {brl(balanceIntegrity.tolerance)}. Revise período incompleto,
+                  lançamento descartado, duplicidade ou direção de crédito/débito antes de considerar a base validada.
+                </p>
+              )}
+
+              {(inferredBalances.openingSource || inferredBalances.closingSource) && (
+                <p className="mt-3 text-[0.7rem] text-muted-foreground">
+                  Saldos detectados no arquivo: inicial {inferredBalances.openingSource ?? "não identificado"} · final{" "}
+                  {inferredBalances.closingSource ?? "não identificado"}.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-left text-sm">
