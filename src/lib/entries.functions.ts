@@ -27,6 +27,7 @@ export const listEntries = createServerFn({ method: "GET" })
         clientId: z.string().uuid(),
         status: z.string().max(20).nullable(),
         search: z.string().max(120).nullable(),
+        entryIds: z.array(z.string().uuid()).max(5000).nullable().default(null),
         importId: z.string().uuid().nullable(),
         limit: z.number().min(1).max(500).default(200),
       })
@@ -42,7 +43,8 @@ export const listEntries = createServerFn({ method: "GET" })
 
     if (data.status && data.status !== "todos") query = query.eq("status", data.status as never);
     if (data.importId) query = query.eq("import_id", data.importId);
-    if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
+    if (data.entryIds?.length) query = query.in("id", data.entryIds);
+    else if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
 
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
@@ -495,7 +497,6 @@ ${entries.map((e) => `- id=${e.id} | descrição="${e.description}" | fornecedor
     let updated = 0;
     for (const s of suggestions.data) {
       if (!validIds.has(s.id)) continue;
-      // IA nunca classifica automaticamente: teto de confiança abaixo do limite automático.
       const confidence = Math.min(Math.max(s.confidence, 0), 0.8);
       const status = statusFor(confidence) === "auto" ? "sugerido" : statusFor(confidence);
       const { error: updateError } = await supabase
