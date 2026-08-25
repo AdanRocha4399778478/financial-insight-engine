@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { RefreshCcw, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCcw, Sparkles } from "lucide-react";
 import {
   classifyEntries,
   confirmSuggestions,
@@ -68,14 +68,16 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/classif
 });
 
 const NONE = "__none__";
-const statusFilters: { key: string; label: string }[] = [
+const primaryFilters = [
   { key: "pendente", label: "Pendentes" },
   { key: "sugerido", label: "Sugeridos" },
   { key: "auto", label: "Automáticos" },
+] as const;
+const secondaryFilters = [
   { key: "confirmado", label: "Confirmados" },
   { key: "ignorado", label: "Ignorados" },
   { key: "todos", label: "Todos" },
-];
+] as const;
 
 const statusTone: Record<EntryStatus, string> = {
   pendente: "bg-destructive/15 text-destructive",
@@ -113,6 +115,8 @@ function ClassificationPage() {
   const [paretoLabel, setParetoLabel] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [reclassifyMode, setReclassifyMode] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showAllRows, setShowAllRows] = useState(false);
   const [statementType, setStatementType] = useState<StatementType>("resultado");
   const [balanceGroup, setBalanceGroup] = useState<BalanceGroup>("passivo");
   const [form, setForm] = useState<{
@@ -152,10 +156,11 @@ function ClassificationPage() {
 
   const rows = entries.data?.rows ?? [];
   const summary = entries.data?.summary;
-  const allSelected = rows.length > 0 && selected.length === rows.length;
+  const visibleRows = showAllRows || paretoEntryIds || search.trim() ? rows : rows.slice(0, 10);
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selected.includes(row.id));
 
   const selectedRows = useMemo(
-    () => rows.filter((r) => selected.includes(r.id)),
+    () => rows.filter((row) => selected.includes(row.id)),
     [rows, selected],
   );
 
@@ -178,12 +183,11 @@ function ClassificationPage() {
       groups.set(key, (groups.get(key) ?? 0) + 1);
     }
 
-    const top = [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
     return {
       resultado,
       balanco,
       totalAmount,
-      top,
+      top: [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4),
       heterogeneous: groups.size > 1,
     };
   }, [selectedRows]);
@@ -202,12 +206,19 @@ function ClassificationPage() {
   }, [rows, status]);
 
   const isAutomaticFilter = status === "auto";
-  const showClassificationForm =
-    status !== "sugerido" && (!isAutomaticFilter || reclassifyMode);
+  const showClassificationForm = status !== "sugerido" && (!isAutomaticFilter || reclassifyMode);
 
   const clearParetoFilter = () => {
     setParetoEntryIds(null);
     setParetoLabel(null);
+  };
+
+  const changeStatus = (next: string) => {
+    setStatus(next);
+    setSelected([]);
+    setReclassifyMode(false);
+    setShowAllRows(false);
+    clearParetoFilter();
   };
 
   const refresh = () => {
@@ -222,10 +233,8 @@ function ClassificationPage() {
     setParetoLabel(item.historyKey);
     setStatus("pendente");
     setSelected([]);
-    setReclassifyMode(false);
-    window.setTimeout(() => {
-      entriesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    setShowAllRows(true);
+    window.setTimeout(() => entriesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   };
 
   const classify = useMutation({
@@ -246,9 +255,7 @@ function ClassificationPage() {
         },
       }),
     onSuccess: (result) => {
-      toast.success(
-        `${result.updated} lançamento(s) confirmados${result.ruleId ? " · regra criada" : ""}`,
-      );
+      toast.success(`${result.updated} lançamento(s) confirmados${result.ruleId ? " · regra criada" : ""}`);
       setForm({ ...form, account: "" });
       setRulePattern("");
       refresh();
@@ -259,12 +266,7 @@ function ClassificationPage() {
   const classifyBalance = useMutation({
     mutationFn: () =>
       applyBalanceClassification({
-        data: {
-          clientId,
-          entryIds: selected,
-          account: form.account.trim(),
-          balanceGroup,
-        },
+        data: { clientId, entryIds: selected, account: form.account.trim(), balanceGroup },
       }),
     onSuccess: (result) => {
       toast.success(`${result.updated} lançamento(s) confirmados no Balanço Patrimonial.`);
@@ -290,8 +292,8 @@ function ClassificationPage() {
 
   const bulkConfirm = useMutation({
     mutationFn: () => confirm({ data: { clientId, entryIds: selected } }),
-    onSuccess: (r) => {
-      if (r.updated > 0) toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+    onSuccess: (result) => {
+      if (result.updated > 0) toast.success(`${result.updated} sugestão(ões) confirmada(s).`);
       else toast.info("Nenhuma sugestão elegível para confirmar.");
       refresh();
     },
@@ -300,8 +302,8 @@ function ClassificationPage() {
 
   const confirmVisibleSuggestions = useMutation({
     mutationFn: () => confirm({ data: { clientId, entryIds: rows.map((row) => row.id) } }),
-    onSuccess: (r) => {
-      if (r.updated > 0) toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+    onSuccess: (result) => {
+      if (result.updated > 0) toast.success(`${result.updated} sugestão(ões) confirmada(s).`);
       else toast.info("Nenhuma sugestão elegível para confirmar.");
       refresh();
     },
@@ -310,8 +312,8 @@ function ClassificationPage() {
 
   const bulkIgnore = useMutation({
     mutationFn: () => ignore({ data: { clientId, entryIds: selected } }),
-    onSuccess: (r) => {
-      toast.success(`${r.updated} lançamento(s) fora da DRE.`);
+    onSuccess: (result) => {
+      toast.success(`${result.updated} lançamento(s) fora da DRE.`);
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -319,8 +321,8 @@ function ClassificationPage() {
 
   const ai = useMutation({
     mutationFn: () => askAI({ data: { clientId, entryIds: selected.slice(0, 60) } }),
-    onSuccess: (r) => {
-      toast.success(`${r.updated} sugestão(ões) geradas pela IA. Revise antes de confirmar.`);
+    onSuccess: (result) => {
+      toast.success(`${result.updated} sugestão(ões) geradas pela IA. Revise antes de confirmar.`);
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -328,10 +330,8 @@ function ClassificationPage() {
 
   const reprocess = useMutation({
     mutationFn: () => reprocessLearning({ data: { clientId } }),
-    onSuccess: (r) => {
-      toast.success(
-        `${r.automatic} automático(s), ${r.suggested} sugerido(s), ${r.remaining} ainda pendente(s).`,
-      );
+    onSuccess: (result) => {
+      toast.success(`${result.automatic} automático(s), ${result.suggested} sugerido(s), ${result.remaining} ainda pendente(s).`);
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -339,182 +339,164 @@ function ClassificationPage() {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="sticky top-0 z-30 -mx-1 flex flex-wrap items-center gap-2 border-b border-border bg-background/95 px-1 py-3 backdrop-blur">
-        {statusFilters.map((filter) => (
-          <button
-            key={filter.key}
-            onClick={() => {
-              setStatus(filter.key);
-              setSelected([]);
-              setReclassifyMode(false);
+      <div className="sticky top-0 z-30 -mx-1 border-b border-border bg-background/95 px-1 py-3 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          {primaryFilters.map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => changeStatus(filter.key)}
+              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
+                status === filter.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {filter.label}{summary ? ` · ${summary[filter.key as keyof typeof summary] ?? 0}` : ""}
+            </button>
+          ))}
+          <Select value={secondaryFilters.some((item) => item.key === status) ? status : NONE} onValueChange={changeStatus}>
+            <SelectTrigger className="h-8 w-36 rounded-full text-xs">
+              <SelectValue placeholder="Mais filtros" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE} disabled>Mais filtros</SelectItem>
+              {secondaryFilters.map((filter) => (
+                <SelectItem key={filter.key} value={filter.key}>
+                  {filter.label}{summary && filter.key !== "todos" ? ` · ${summary[filter.key as keyof typeof summary] ?? 0}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={search}
+            maxLength={120}
+            onChange={(event) => {
               clearParetoFilter();
+              setSearch(event.target.value);
             }}
-            className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
-              status === filter.key
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {filter.label}
-            {summary && filter.key !== "todos"
-              ? ` · ${summary[filter.key as keyof typeof summary] ?? 0}`
-              : ""}
-          </button>
-        ))}
-        <Button
-          variant="secondary"
-          onClick={() => reprocess.mutate()}
-          disabled={reprocess.isPending || (summary?.pendente ?? 0) === 0}
-        >
-          <RefreshCcw className={`mr-2 h-4 w-4 ${reprocess.isPending ? "animate-spin" : ""}`} />
-          {reprocess.isPending ? "Reprocessando..." : "Reprocessar com aprendizado"}
-        </Button>
-        <Input
-          value={search}
-          maxLength={120}
-          onChange={(e) => {
-            clearParetoFilter();
-            setSearch(e.target.value);
-          }}
-          placeholder="Buscar descrição ou fornecedor"
-          className="ml-auto w-full sm:w-72"
-        />
+            placeholder="Buscar descrição ou fornecedor"
+            className="ml-auto w-full sm:w-72"
+          />
+        </div>
       </div>
 
-      {status === "sugerido" && rows.length > 0 && (
-        <section className="rounded-lg border border-primary/40 bg-primary/5 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="font-display text-lg font-semibold">Revisar sugestões</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {rows.length} sugestão(ões) visível(is). Revise a lista abaixo e confirme em lote quando estiver de acordo.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {suggestionGroups.slice(0, 4).map((group) => (
-                  <Badge key={`${group.account}-${group.nature}-${group.behavior}`} variant="secondary">
-                    {group.count}× {group.account} · {NATURE_LABEL[group.nature as Nature]} · {BEHAVIOR_LABEL[group.behavior as Behavior]}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setSelected(rows.map((row) => row.id))}>
-                Selecionar todas
-              </Button>
-              <Button
-                onClick={() => confirmVisibleSuggestions.mutate()}
-                disabled={confirmVisibleSuggestions.isPending}
-              >
-                {confirmVisibleSuggestions.isPending
-                  ? "Confirmando..."
-                  : `Confirmar ${rows.length} sugestão(ões)`}
-              </Button>
-            </div>
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            A confirmação mantém a classificação já sugerida em cada lançamento; não é necessário preencher a conta novamente.
-          </p>
-        </section>
-      )}
-
       {status === "pendente" && pendingIdentitySummary.data && pendingIdentitySummary.data.totalPending > 0 && (
-        <section className="rounded-lg border border-border bg-card p-6">
+        <section className="rounded-lg border border-border bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="font-display text-sm font-semibold">Pareto das pendências</p>
+              <p className="font-display text-base font-semibold">Prioridades para resolver agora</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {pendingIdentitySummary.data.totalPending} pendência(s) ·{" "}
-                {pendingIdentitySummary.data.totalIdentities} identidade(s) única(s)
+                {pendingIdentitySummary.data.totalPending} pendência(s) em {pendingIdentitySummary.data.totalIdentities} identidade(s). Comece pelas 5 que mais se repetem.
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Top 10 identidades</p>
-              <p className="font-display text-2xl font-semibold">
-                {pendingIdentitySummary.data.topCoveragePct}%
-              </p>
-              <p className="text-xs text-muted-foreground">das pendências cobertas</p>
-            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => reprocess.mutate()}
+              disabled={reprocess.isPending || (summary?.pendente ?? 0) === 0}
+            >
+              <RefreshCcw className={`mr-2 h-4 w-4 ${reprocess.isPending ? "animate-spin" : ""}`} />
+              {reprocess.isPending ? "Reprocessando..." : "Reprocessar aprendizado"}
+            </Button>
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Identidade</th>
-                  <th className="px-4 py-3 text-right">Ocorrências</th>
-                  <th className="px-4 py-3 text-right">Impacto</th>
-                  <th className="px-4 py-3">Exemplo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {pendingIdentitySummary.data.items.map((item) => (
-                  <tr
-                    key={item.historyKey}
-                    onClick={() => focusParetoIdentity(item)}
-                    className="cursor-pointer transition-colors hover:bg-muted/40"
-                    title="Filtrar lançamentos desta identidade"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs">{item.historyKey}</td>
-                    <td className="px-4 py-3 text-right">{item.count}</td>
-                    <td className="px-4 py-3 text-right font-mono">{brl(item.totalAmount)}</td>
-                    <td className="max-w-md px-4 py-3 text-muted-foreground">
-                      <p className="truncate">{item.sampleDescription}</p>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
+            {pendingIdentitySummary.data.items.slice(0, 5).map((item, index) => (
+              <button
+                key={item.historyKey}
+                type="button"
+                onClick={() => focusParetoIdentity(item)}
+                className="flex w-full flex-wrap items-center gap-4 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs text-primary">
+                  {index + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-xs">{item.historyKey}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">{item.sampleDescription}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">{item.count} lançamento(s)</p>
+                  <p className="font-mono text-xs text-muted-foreground">{brl(item.totalAmount)}</p>
+                </div>
+                <span className="text-xs font-medium text-primary">Resolver grupo →</span>
+              </button>
+            ))}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Clique em uma identidade para abrir exatamente os lançamentos que compõem aquele grupo.
+            Resolver um grupo filtra somente os lançamentos daquela identidade. Depois mostramos a próxima prioridade.
           </p>
         </section>
       )}
 
       {status === "pendente" && matchDiagnostics.data && matchDiagnostics.data.totalPending > 0 && (
-        <section className="rounded-lg border border-primary/20 bg-card p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="font-display text-sm font-semibold">Diagnóstico do casamento com treinamento</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {matchDiagnostics.data.activeTrainingKeys} chave(s) históricas ativas ·{" "}
-                {matchDiagnostics.data.exactMatches} match(es) exato(s) ·{" "}
-                {matchDiagnostics.data.uncoveredIdentities} identidade(s) sem cobertura
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-display text-sm font-semibold">Diagnóstico do aprendizado</p>
+                <Badge variant="outline">{matchDiagnostics.data.uncoveredIdentities} sem cobertura</Badge>
+                <Badge variant="outline">{matchDiagnostics.data.exactMatches} matches exatos</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Informação técnica para investigar por que algumas identidades ainda não foram aprendidas.
               </p>
             </div>
-            <Badge variant="outline">somente diagnóstico</Badge>
+            <Button variant="outline" size="sm" onClick={() => setShowDiagnostics((value) => !value)}>
+              {showDiagnostics ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+              {showDiagnostics ? "Recolher diagnóstico" : "Ver diagnóstico"}
+            </Button>
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Pendente</th>
-                  <th className="px-4 py-3">Relação</th>
-                  <th className="px-4 py-3">Candidato histórico</th>
-                  <th className="px-4 py-3">Conta</th>
-                  <th className="px-4 py-3 text-right">Ocorrências</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {matchDiagnostics.data.items.map((item) => (
-                  <tr key={item.pendingKey}>
-                    <td className="max-w-xs px-4 py-3 font-mono text-xs">
-                      <p className="truncate">{item.pendingKey}</p>
-                      <p className="mt-1 truncate text-muted-foreground">{item.sampleDescription}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="secondary">{relationLabel[item.relation]}</Badge>
-                    </td>
-                    <td className="max-w-xs px-4 py-3 font-mono text-xs text-muted-foreground">
-                      <p className="truncate">{item.candidateKey ?? "—"}</p>
-                    </td>
-                    <td className="px-4 py-3">{item.candidateAccount ?? "—"}</td>
-                    <td className="px-4 py-3 text-right">{item.count}</td>
+          {showDiagnostics && (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Pendente</th>
+                    <th className="px-4 py-3">Relação</th>
+                    <th className="px-4 py-3">Candidato histórico</th>
+                    <th className="px-4 py-3">Conta</th>
+                    <th className="px-4 py-3 text-right">Ocorrências</th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {matchDiagnostics.data.items.map((item) => (
+                    <tr key={item.pendingKey}>
+                      <td className="max-w-xs px-4 py-3 font-mono text-xs">
+                        <p className="truncate">{item.pendingKey}</p>
+                        <p className="mt-1 truncate text-muted-foreground">{item.sampleDescription}</p>
+                      </td>
+                      <td className="px-4 py-3"><Badge variant="secondary">{relationLabel[item.relation]}</Badge></td>
+                      <td className="max-w-xs px-4 py-3 font-mono text-xs text-muted-foreground">{item.candidateKey ?? "—"}</td>
+                      <td className="px-4 py-3">{item.candidateAccount ?? "—"}</td>
+                      <td className="px-4 py-3 text-right">{item.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {status === "sugerido" && rows.length > 0 && (
+        <section className="rounded-lg border border-primary/30 bg-primary/5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-display text-sm font-semibold">Sugestões prontas para revisão</p>
+              <p className="mt-1 text-xs text-muted-foreground">{rows.length} sugestão(ões). Confira os grupos principais antes de confirmar.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {suggestionGroups.slice(0, 4).map((group) => (
+                  <Badge key={`${group.account}-${group.nature}-${group.behavior}`} variant="secondary">
+                    {group.count}× {group.account}
+                  </Badge>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
+            <Button onClick={() => confirmVisibleSuggestions.mutate()} disabled={confirmVisibleSuggestions.isPending}>
+              {confirmVisibleSuggestions.isPending ? "Confirmando..." : `Confirmar ${rows.length}`}
+            </Button>
           </div>
         </section>
       )}
@@ -525,36 +507,35 @@ function ClassificationPage() {
             <div>
               <p className="font-display text-sm font-semibold">Lançamentos</p>
               <p className="text-xs text-muted-foreground">
-                {rows.length} item(ns) neste filtro
-                {paretoLabel
-                  ? ` · Pareto: ${paretoLabel}`
-                  : search.trim()
-                    ? ` · filtro: ${search.trim()}`
-                    : ""}
+                Mostrando {visibleRows.length} de {rows.length} item(ns)
+                {paretoLabel ? ` · grupo: ${paretoLabel}` : search.trim() ? ` · filtro: ${search.trim()}` : ""}
               </p>
             </div>
-            {(search.trim() || paretoEntryIds) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  clearParetoFilter();
-                }}
-              >
-                Limpar filtro
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {(search.trim() || paretoEntryIds) && (
+                <Button variant="ghost" size="sm" onClick={() => { setSearch(""); clearParetoFilter(); setShowAllRows(false); }}>
+                  Limpar filtro
+                </Button>
+              )}
+              {!paretoEntryIds && !search.trim() && rows.length > 10 && (
+                <Button variant="outline" size="sm" onClick={() => setShowAllRows((value) => !value)}>
+                  {showAllRows ? "Mostrar menos" : `Ver todos (${rows.length})`}
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="max-h-[68vh] overflow-auto">
+          <div className={showAllRows ? "max-h-[68vh] overflow-auto" : "overflow-auto"}>
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-20 bg-muted font-mono text-xs uppercase tracking-wider text-muted-foreground shadow-sm">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <Checkbox
-                      checked={allSelected}
-                      onCheckedChange={(checked) => setSelected(checked ? rows.map((r) => r.id) : [])}
+                      checked={allVisibleSelected}
+                      onCheckedChange={(checked) => {
+                        const ids = visibleRows.map((row) => row.id);
+                        setSelected((previous) => checked ? [...new Set([...previous, ...ids])] : previous.filter((id) => !ids.includes(id)));
+                      }}
                     />
                   </th>
                   <th className="px-4 py-3">Data</th>
@@ -566,35 +547,21 @@ function ClassificationPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={`bg-card transition-colors hover:bg-muted/20 ${
-                      selected.includes(row.id) ? "bg-primary/5" : ""
-                    }`}
-                  >
+                {visibleRows.map((row) => (
+                  <tr key={row.id} className={`bg-card transition-colors hover:bg-muted/20 ${selected.includes(row.id) ? "bg-primary/5" : ""}`}>
                     <td className="px-4 py-3">
                       <Checkbox
                         checked={selected.includes(row.id)}
                         onCheckedChange={(checked) =>
-                          setSelected((prev) =>
-                            checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
-                          )
+                          setSelected((previous) => checked ? [...previous, row.id] : previous.filter((id) => id !== row.id))
                         }
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.entry_date}</td>
                     <td className="max-w-sm px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelected([row.id])}
-                        className="block w-full text-left"
-                        title="Abrir lançamento no workspace"
-                      >
+                      <button type="button" onClick={() => setSelected([row.id])} className="block w-full text-left">
                         <p className="truncate hover:text-primary">{row.description}</p>
-                        {row.counterparty && (
-                          <p className="truncate text-xs text-muted-foreground">{row.counterparty}</p>
-                        )}
+                        {row.counterparty && <p className="truncate text-xs text-muted-foreground">{row.counterparty}</p>}
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -607,19 +574,13 @@ function ClassificationPage() {
                               : `${NATURE_LABEL[row.nature as Nature]} · ${BEHAVIOR_LABEL[row.behavior as Behavior]}`}
                           </p>
                         </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {row.classification_source ?? "—"}
-                      <span className="ml-1 font-mono">
-                        {row.confidence ? `(${Math.round(row.confidence * 100)}%)` : ""}
-                      </span>
+                      <span className="ml-1 font-mono">{row.confidence ? `(${Math.round(row.confidence * 100)}%)` : ""}</span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
-                      {brl(Number(row.amount))}
-                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono">{brl(Number(row.amount))}</td>
                     <td className="px-4 py-3">
                       <Badge className={statusTone[row.status as EntryStatus]} variant="secondary">
                         {STATUS_LABEL[row.status as EntryStatus]}
@@ -629,14 +590,8 @@ function ClassificationPage() {
                 ))}
               </tbody>
             </table>
-            {!entries.isLoading && rows.length === 0 && (
-              <p className="bg-card p-10 text-center text-sm text-muted-foreground">
-                Nenhum lançamento neste filtro.
-              </p>
-            )}
-            {entries.isLoading && (
-              <p className="bg-card p-10 text-center text-sm text-muted-foreground">Carregando...</p>
-            )}
+            {!entries.isLoading && rows.length === 0 && <p className="p-10 text-center text-sm text-muted-foreground">Nenhum lançamento neste filtro.</p>}
+            {entries.isLoading && <p className="p-10 text-center text-sm text-muted-foreground">Carregando...</p>}
           </div>
         </div>
 
@@ -645,9 +600,7 @@ function ClassificationPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-display text-sm font-semibold">Workspace de classificação</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Classifique a seleção abaixo sem reduzir a largura da tabela.
-                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Uma decisão pode ser aplicada a toda a seleção atual.</p>
               </div>
               <Badge variant="secondary">{selected.length} selecionado(s)</Badge>
             </div>
@@ -659,9 +612,7 @@ function ClassificationPage() {
                     <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamento</p>
                     <p className="mt-1 break-words text-sm font-medium">{selectedRows[0]!.description}</p>
                   </div>
-                  <p className="whitespace-nowrap font-mono text-sm font-semibold">
-                    {brl(Number(selectedRows[0]!.amount))}
-                  </p>
+                  <p className="whitespace-nowrap font-mono text-sm font-semibold">{brl(Number(selectedRows[0]!.amount))}</p>
                 </div>
                 {selectedRows[0]!.counterparty && (
                   <div>
@@ -675,25 +626,18 @@ function ClassificationPage() {
                   <Badge variant="outline">{STATUS_LABEL[selectedRows[0]!.status as EntryStatus]}</Badge>
                 </div>
                 {selectedRows.length > 1 && (
-                  <p className="text-xs text-muted-foreground">
-                    + {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}
-                  </p>
+                  <p className="text-xs text-muted-foreground">+ {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}</p>
                 )}
-
                 {isAutomaticFilter && (
                   <>
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
                       <Badge variant="outline">Balanço: {selectionStats.balanco}</Badge>
-                      {selectionStats.top.map(([label, count]) => (
-                        <Badge key={label} variant="secondary">
-                          {count}× {label}
-                        </Badge>
-                      ))}
+                      {selectionStats.top.map(([label, count]) => <Badge key={label} variant="secondary">{count}× {label}</Badge>)}
                     </div>
                     {selectionStats.heterogeneous && (
                       <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
-                        A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substituirá todos os selecionados pela nova classificação.
+                        A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substitui todos pela nova classificação.
                       </p>
                     )}
                   </>
@@ -705,116 +649,50 @@ function ClassificationPage() {
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div className="space-y-2">
                       <Label>Demonstrativo</Label>
-                      <Select
-                        value={statementType}
-                        onValueChange={(value) => setStatementType(value as StatementType)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={statementType} onValueChange={(value) => setStatementType(value as StatementType)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {STATEMENT_TYPES.map((item) => (
-                            <SelectItem key={item} value={item}>
-                              {STATEMENT_TYPE_LABEL[item]}
-                            </SelectItem>
-                          ))}
+                          {STATEMENT_TYPES.map((item) => <SelectItem key={item} value={item}>{STATEMENT_TYPE_LABEL[item]}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-2">
-                      <Label htmlFor="account">
-                        {statementType === "balanco" ? "Conta patrimonial" : "Conta gerencial"}
-                      </Label>
-                      <Input
-                        id="account"
-                        maxLength={120}
-                        placeholder={
-                          statementType === "balanco"
-                            ? "Empréstimos e Financiamentos..."
-                            : "Combustível, Salários..."
-                        }
-                        value={form.account}
-                        onChange={(e) => setForm({ ...form, account: e.target.value })}
-                      />
+                      <Label htmlFor="account">{statementType === "balanco" ? "Conta patrimonial" : "Conta gerencial"}</Label>
+                      <Input id="account" maxLength={120} placeholder={statementType === "balanco" ? "Empréstimos e Financiamentos..." : "Combustível, Salários..."} value={form.account} onChange={(event) => setForm({ ...form, account: event.target.value })} />
                     </div>
-
                     {statementType === "balanco" ? (
                       <div className="space-y-2">
                         <Label>Grupo patrimonial</Label>
-                        <Select
-                          value={balanceGroup}
-                          onValueChange={(value) => setBalanceGroup(value as BalanceGroup)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {BALANCE_GROUPS.map((group) => (
-                              <SelectItem key={group} value={group}>
-                                {BALANCE_GROUP_LABEL[group]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
+                        <Select value={balanceGroup} onValueChange={(value) => setBalanceGroup(value as BalanceGroup)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{BALANCE_GROUPS.map((group) => <SelectItem key={group} value={group}>{BALANCE_GROUP_LABEL[group]}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                     ) : (
                       <>
                         <div className="space-y-2">
                           <Label>Natureza</Label>
-                          <Select
-                            value={form.nature}
-                            onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {NATURES.map((n) => (
-                                <SelectItem key={n} value={n}>
-                                  {NATURE_LABEL[n]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
+                          <Select value={form.nature} onValueChange={(value) => setForm({ ...form, nature: value as Nature })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{NATURES.map((nature) => <SelectItem key={nature} value={nature}>{NATURE_LABEL[nature]}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-2">
                           <Label>Comportamento</Label>
-                          <Select
-                            value={form.behavior}
-                            onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {BEHAVIORS.map((b) => (
-                                <SelectItem key={b} value={b}>
-                                  {BEHAVIOR_LABEL[b]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
+                          <Select value={form.behavior} onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{BEHAVIORS.map((behavior) => <SelectItem key={behavior} value={behavior}>{BEHAVIOR_LABEL[behavior]}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-2 md:col-span-2 xl:col-span-1">
                           <Label>Área</Label>
                           <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={NONE}>Sem área</SelectItem>
-                              {AREAS.map((a) => (
-                                <SelectItem key={a} value={a}>
-                                  {a}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value={NONE}>Sem área</SelectItem>{AREAS.map((area) => <SelectItem key={area} value={area}>{area}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                       </>
                     )}
-
                     {statementType === "resultado" && (
                       <div className="space-y-3 rounded-lg border border-border p-4 md:col-span-2 xl:col-span-4">
                         <div className="flex items-center gap-3">
@@ -823,39 +701,18 @@ function ClassificationPage() {
                         </div>
                         {createRule && (
                           <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-                            <Select
-                              value={ruleField}
-                              onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="description">Padrão na descrição</SelectItem>
-                                <SelectItem value="counterparty">Fornecedor</SelectItem>
-                              </SelectContent>
+                            <Select value={ruleField} onValueChange={(value) => setRuleField(value as "description" | "counterparty")}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="description">Padrão na descrição</SelectItem><SelectItem value="counterparty">Fornecedor</SelectItem></SelectContent>
                             </Select>
-                            <Input
-                              maxLength={200}
-                              placeholder="Texto do padrão (opcional)"
-                              value={rulePattern}
-                              onChange={(e) => setRulePattern(e.target.value)}
-                            />
+                            <Input maxLength={200} placeholder="Texto do padrão (opcional)" value={rulePattern} onChange={(event) => setRulePattern(event.target.value)} />
                           </div>
                         )}
                       </div>
                     )}
-
-                    {statementType === "balanco" && (
-                      <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-4">
-                        Movimentos patrimoniais ficam confirmados, são rastreados no Balanço e não entram na DRE.
-                      </p>
-                    )}
                   </div>
                 ) : (
-                  <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-                    A classificação atual já está pronta. Use as ações abaixo para confirmar ou reclassificar a seleção.
-                  </p>
+                  <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">A classificação atual já está pronta. Confirme ou escolha reclassificar.</p>
                 )}
               </div>
             </div>
@@ -867,33 +724,19 @@ function ClassificationPage() {
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 shadow-2xl backdrop-blur">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
             <div className="mr-auto">
-              <p className="text-sm font-medium">
-                {selected.length} selecionado(s) · {brl(selectionStats.totalAmount)} de impacto absoluto
-              </p>
-              <p className="text-xs text-muted-foreground">Ações da seleção permanecem acessíveis durante a rolagem.</p>
+              <p className="text-sm font-medium">{selected.length} selecionado(s) · {brl(selectionStats.totalAmount)} de impacto absoluto</p>
+              <p className="text-xs text-muted-foreground">Aplique uma decisão à seleção e avance para o próximo grupo.</p>
             </div>
-
             {isAutomaticFilter && !reclassifyMode && (
               <>
-                <Button
-                  onClick={() => confirmAutomatic.mutate()}
-                  disabled={confirmAutomatic.isPending}
-                >
-                  {confirmAutomatic.isPending ? "Confirmando..." : "Confirmar atuais"}
-                </Button>
-                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>
-                  Reclassificar
-                </Button>
+                <Button onClick={() => confirmAutomatic.mutate()} disabled={confirmAutomatic.isPending}>{confirmAutomatic.isPending ? "Confirmando..." : "Confirmar atuais"}</Button>
+                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>Reclassificar</Button>
               </>
             )}
-
             {showClassificationForm && statementType === "resultado" && (
               <Button
                 onClick={() => {
-                  if (!form.account.trim()) {
-                    toast.error("Informe a conta gerencial.");
-                    return;
-                  }
+                  if (!form.account.trim()) return toast.error("Informe a conta gerencial.");
                   classify.mutate();
                 }}
                 disabled={classify.isPending}
@@ -904,10 +747,7 @@ function ClassificationPage() {
             {showClassificationForm && statementType === "balanco" && (
               <Button
                 onClick={() => {
-                  if (!form.account.trim()) {
-                    toast.error("Informe a conta patrimonial.");
-                    return;
-                  }
+                  if (!form.account.trim()) return toast.error("Informe a conta patrimonial.");
                   classifyBalance.mutate();
                 }}
                 disabled={classifyBalance.isPending}
@@ -915,34 +755,16 @@ function ClassificationPage() {
                 {classifyBalance.isPending ? "Confirmando..." : "Confirmar no Balanço"}
               </Button>
             )}
-            {status === "sugerido" && (
-              <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
-                {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
-              </Button>
-            )}
+            {status === "sugerido" && <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>{bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}</Button>}
             {showClassificationForm && statementType === "resultado" && (
               <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
               </Button>
             )}
-            {isAutomaticFilter && reclassifyMode && (
-              <Button variant="ghost" onClick={() => setReclassifyMode(false)}>
-                Cancelar reclassificação
-              </Button>
-            )}
-            <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>
-              Ignorar da DRE
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSelected([]);
-                setReclassifyMode(false);
-              }}
-            >
-              Limpar seleção
-            </Button>
+            {isAutomaticFilter && reclassifyMode && <Button variant="ghost" onClick={() => setReclassifyMode(false)}>Cancelar reclassificação</Button>}
+            <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>Ignorar da DRE</Button>
+            <Button variant="ghost" onClick={() => { setSelected([]); setReclassifyMode(false); }}>Limpar seleção</Button>
           </div>
         </div>
       )}
