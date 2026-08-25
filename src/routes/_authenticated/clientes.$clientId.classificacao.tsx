@@ -224,6 +224,7 @@ function ClassificationPage() {
             onClick={() => {
               setStatus(filter.key);
               setSelected([]);
+              setReclassifyMode(false);
             }}
             className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
               status === filter.key
