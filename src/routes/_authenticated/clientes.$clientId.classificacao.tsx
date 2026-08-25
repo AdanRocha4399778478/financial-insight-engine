@@ -339,7 +339,9 @@ function ClassificationPage() {
               </Select>
             </div>
           </div>
+          )}
 
+          {showForm && (
           <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
             <div className="flex items-center gap-3">
               <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
@@ -369,34 +371,71 @@ function ClassificationPage() {
               </>
             )}
           </div>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              onClick={() => {
-                if (!form.account.trim()) {
-                  toast.error("Informe a conta gerencial.");
-                  return;
-                }
-                classify.mutate();
-              }}
-              disabled={classify.isPending}
-            >
-              Confirmar classificação
-            </Button>
-            <Button variant="secondary" onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
-              Aceitar sugestões atuais
-            </Button>
-            <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
-            </Button>
+            {isAuto && !reclassifyMode && (
+              <>
+                <Button onClick={() => confirmAuto.mutate()} disabled={confirmAuto.isPending}>
+                  {confirmAuto.isPending ? "Confirmando..." : "Confirmar classificações atuais"}
+                </Button>
+                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>
+                  Reclassificar seleção
+                </Button>
+              </>
+            )}
+
+            {showForm && (
+              <Button
+                onClick={() => {
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta gerencial.");
+                    return;
+                  }
+                  classify.mutate();
+                }}
+                disabled={classify.isPending}
+              >
+                {isAuto ? "Aplicar nova classificação" : "Confirmar classificação"}
+              </Button>
+            )}
+
+            {isAuto && reclassifyMode && (
+              <Button variant="ghost" onClick={() => setReclassifyMode(false)}>
+                Cancelar reclassificação
+              </Button>
+            )}
+
+            {!isAuto && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => bulkConfirm.mutate()}
+                  disabled={bulkConfirm.isPending}
+                >
+                  Aceitar sugestões atuais
+                </Button>
+                <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
+                </Button>
+              </>
+            )}
+
             <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>
               Ignorar da DRE
             </Button>
-            <Button variant="ghost" onClick={() => setSelected([])}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSelected([]);
+                setReclassifyMode(false);
+              }}
+            >
               Limpar seleção
             </Button>
           </div>
+
 
           {selectedRows.length > 0 && (
             <p className="mt-4 text-xs text-muted-foreground">
