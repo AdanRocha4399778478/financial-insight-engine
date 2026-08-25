@@ -1,4 +1,4 @@
-import { counterpartyFromDescription } from "./classify";
+import { counterpartyFromDescription, normalize } from "./classify";
 import type { Behavior, Nature } from "./finance";
 import type { TrainingInputRow } from "./training-import";
 
@@ -16,9 +16,19 @@ export interface ErinhoTrainingRow {
   "Do que é esse gasto?"?: unknown;
 }
 
+export interface ErinhoTrainingWarning {
+  sourceRowNumber: number;
+  code: "financing_flow" | "interaccount_transfer" | "financial_charge";
+  account: string;
+  description: string;
+  detailedDescription: string | null;
+  reason: string;
+}
+
 export interface ErinhoTrainingParseResult {
   rows: TrainingInputRow[];
   rejected: Array<{ sourceRowNumber: number; reason: string }>;
+  warnings: ErinhoTrainingWarning[];
 }
 
 interface CategoryMapping {
@@ -92,6 +102,61 @@ function identityDescription(source: ErinhoTrainingRow): { description: string; 
   return null;
 }
 
+function semanticWarning(
+  source: ErinhoTrainingRow,
+  sourceRowNumber: number,
+  account: string,
+  mapping: CategoryMapping,
+): ErinhoTrainingWarning | null {
+  const description = text(source["Descrição"]);
+  const detailedDescription = text(source["Descrição Detalhada"]) || null;
+  const haystack = normalize(`${description} ${detailedDescription ?? ""}`);
+
+  if (/\b(LIBERACAO CREDITO|EMPRESTIMO|FINANCIAMENTO)\b/.test(haystack)) {
+    if (!["excluido", "transferencia"].includes(mapping.nature)) {
+      return {
+        sourceRowNumber,
+        code: "financing_flow",
+        account,
+        description,
+        detailedDescription,
+        reason:
+          "Fluxo de financiamento identificado. O principal recebido ou amortizado normalmente não pertence ao resultado; juros e encargos devem ser separados antes de ensinar a classificação.",
+      };
+    }
+  }
+
+  if (/\b(TRANSF ENTRE CONTAS|TRANSFERENCIA ENTRE CONTAS|TRANSF INTERNA|TRANSFERENCIA INTERNA)\b/.test(haystack)) {
+    if (!["excluido", "transferencia"].includes(mapping.nature)) {
+      return {
+        sourceRowNumber,
+        code: "interaccount_transfer",
+        account,
+        description,
+        detailedDescription,
+        reason:
+          "Transferência entre contas detectada. Esse movimento tende a não compor a DRE e merece revisão antes de virar conhecimento automático.",
+      };
+    }
+  }
+
+  if (/\b(IOF|JUROS|TARIFA BANCARIA|TARIFA COBRANCA)\b/.test(haystack)) {
+    if (!["despesa_financeira", "excluido"].includes(mapping.nature)) {
+      return {
+        sourceRowNumber,
+        code: "financial_charge",
+        account,
+        description,
+        detailedDescription,
+        reason:
+          "Encargo financeiro identificado, mas a categoria histórica não está como despesa financeira ou excluída. Revisar antes de ensinar o padrão.",
+      };
+    }
+  }
+
+  return null;
+}
+
 export function erinhoCategoryMapping(category: unknown): CategoryMapping | null {
   return CATEGORY_MAPPING[normalizeLabel(category)] ?? null;
 }
@@ -102,9 +167,11 @@ export function erinhoCategoryMapping(category: unknown): CategoryMapping | null
  * A Descrição Detalhada é usada como identidade quando carrega contraparte útil.
  * Descrições detalhadas genéricas continuam como contexto e não são promovidas
  * artificialmente a fornecedor. Categorias sem semântica segura são rejeitadas.
+ * Linhas com risco contábil/financeiro são apenas sinalizadas para revisão: o
+ * adapter não corrige silenciosamente o histórico do cliente.
  */
 export function parseErinhoTrainingRows(sourceRows: ErinhoTrainingRow[]): ErinhoTrainingParseResult {
-  const result: ErinhoTrainingParseResult = { rows: [], rejected: [] };
+  const result: ErinhoTrainingParseResult = { rows: [], rejected: [], warnings: [] };
 
   sourceRows.forEach((source, index) => {
     const sourceRowNumber = index + 2;
@@ -124,6 +191,9 @@ export function parseErinhoTrainingRows(sourceRows: ErinhoTrainingRow[]): Erinho
       result.rejected.push({ sourceRowNumber, reason: `unknown_category:${account}` });
       return;
     }
+
+    const warning = semanticWarning(source, sourceRowNumber, account, mapping);
+    if (warning) result.warnings.push(warning);
 
     const businessContext = text(source["Ramo Empresarial"]);
     const expenseContext = text(source["Do que é esse gasto?"]);
