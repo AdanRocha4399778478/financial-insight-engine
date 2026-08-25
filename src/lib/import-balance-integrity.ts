@@ -81,6 +81,27 @@ export function inferStatementBalances(balanceRows: BalanceRowLike[]): InferredS
   };
 }
 
+function transitionScore(rows: RunningBalanceRowLike[], direction: "forward" | "reverse", tolerance: number): number {
+  let matches = 0;
+  let comparisons = 0;
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const previous = rows[i - 1]!;
+    const current = rows[i]!;
+    if (!isFiniteNumber(previous.balance) || !isFiniteNumber(current.balance)) continue;
+    comparisons += 1;
+
+    const matchesTransition =
+      direction === "forward"
+        ? withinTolerance(previous.balance + current.amount, current.balance, tolerance)
+        : withinTolerance(current.balance + previous.amount, previous.balance, tolerance);
+
+    if (matchesTransition) matches += 1;
+  }
+
+  return comparisons === 0 ? 0 : matches / comparisons;
+}
+
 export function inferBalancesFromRunningBalance(
   rows: RunningBalanceRowLike[],
   tolerance = 0.01,
@@ -95,57 +116,57 @@ export function inferBalancesFromRunningBalance(
     };
   }
 
-  let forwardMatches = 0;
-  let reverseMatches = 0;
-  let comparisons = 0;
+  const totalNet = roundCurrency(usable.reduce((sum, row) => sum + row.amount, 0));
+  const first = usable[0]!;
+  const last = usable.at(-1)!;
 
-  for (let i = 1; i < usable.length; i += 1) {
-    const previous = usable[i - 1]!;
-    const current = usable[i]!;
-    if (!isFiniteNumber(previous.balance) || !isFiniteNumber(current.balance)) continue;
-    comparisons += 1;
+  const forwardOpening = roundCurrency(first.balance! - first.amount);
+  const forwardClosing = roundCurrency(last.balance!);
+  const forwardCloses = withinTolerance(forwardOpening + totalNet, forwardClosing, tolerance);
 
-    if (withinTolerance(previous.balance + current.amount, current.balance, tolerance)) {
-      forwardMatches += 1;
-    }
-    if (withinTolerance(current.balance + previous.amount, previous.balance, tolerance)) {
-      reverseMatches += 1;
-    }
-  }
+  const reverseOpening = roundCurrency(last.balance! - last.amount);
+  const reverseClosing = roundCurrency(first.balance!);
+  const reverseCloses = withinTolerance(reverseOpening + totalNet, reverseClosing, tolerance);
 
-  if (comparisons === 0) {
+  if (forwardCloses && !reverseCloses) {
     return {
-      openingBalance: null,
-      closingBalance: null,
-      openingSource: null,
-      closingSource: null,
-    };
-  }
-
-  const forwardRatio = forwardMatches / comparisons;
-  const reverseRatio = reverseMatches / comparisons;
-  const minimumConfidence = 0.8;
-
-  if (forwardRatio >= minimumConfidence && forwardRatio > reverseRatio) {
-    const first = usable[0]!;
-    const last = usable.at(-1)!;
-    return {
-      openingBalance: roundCurrency(first.balance! - first.amount),
-      closingBalance: roundCurrency(last.balance!),
-      openingSource: "coluna de saldo acumulado (ordem crescente)",
+      openingBalance: forwardOpening,
+      closingBalance: forwardClosing,
+      openingSource: "coluna de saldo acumulado (fechamento do período, ordem crescente)",
       closingSource: "coluna de saldo acumulado (última linha)",
     };
   }
 
-  if (reverseRatio >= minimumConfidence && reverseRatio > forwardRatio) {
-    const first = usable[0]!;
-    const last = usable.at(-1)!;
+  if (reverseCloses && !forwardCloses) {
     return {
-      openingBalance: roundCurrency(last.balance! - last.amount),
-      closingBalance: roundCurrency(first.balance!),
-      openingSource: "coluna de saldo acumulado (ordem decrescente)",
+      openingBalance: reverseOpening,
+      closingBalance: reverseClosing,
+      openingSource: "coluna de saldo acumulado (fechamento do período, ordem decrescente)",
       closingSource: "coluna de saldo acumulado (primeira linha)",
     };
+  }
+
+  if (forwardCloses && reverseCloses) {
+    const forwardScore = transitionScore(usable, "forward", tolerance);
+    const reverseScore = transitionScore(usable, "reverse", tolerance);
+
+    if (forwardScore > reverseScore) {
+      return {
+        openingBalance: forwardOpening,
+        closingBalance: forwardClosing,
+        openingSource: "coluna de saldo acumulado (fechamento do período, ordem crescente)",
+        closingSource: "coluna de saldo acumulado (última linha)",
+      };
+    }
+
+    if (reverseScore > forwardScore) {
+      return {
+        openingBalance: reverseOpening,
+        closingBalance: reverseClosing,
+        openingSource: "coluna de saldo acumulado (fechamento do período, ordem decrescente)",
+        closingSource: "coluna de saldo acumulado (primeira linha)",
+      };
+    }
   }
 
   return {
