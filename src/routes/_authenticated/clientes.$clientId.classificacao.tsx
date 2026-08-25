@@ -11,9 +11,18 @@ import {
   listEntries,
   suggestWithAI,
 } from "@/lib/entries.functions";
+import { classifyBalanceEntries } from "@/lib/balance-classification.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
 import { diagnoseTrainingMatchGaps } from "@/lib/training-match-diagnostics.functions";
+import {
+  BALANCE_GROUPS,
+  BALANCE_GROUP_LABEL,
+  STATEMENT_TYPES,
+  STATEMENT_TYPE_LABEL,
+  type BalanceGroup,
+  type StatementType,
+} from "@/lib/accounting";
 import {
   AREAS,
   BEHAVIORS,
@@ -89,6 +98,7 @@ function ClassificationPage() {
   const fetchPendingIdentitySummary = useServerFn(listPendingIdentitySummary);
   const fetchMatchDiagnostics = useServerFn(diagnoseTrainingMatchGaps);
   const applyClassification = useServerFn(classifyEntries);
+  const applyBalanceClassification = useServerFn(classifyBalanceEntries);
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
@@ -97,6 +107,8 @@ function ClassificationPage() {
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [statementType, setStatementType] = useState<StatementType>("resultado");
+  const [balanceGroup, setBalanceGroup] = useState<BalanceGroup>("passivo");
   const [form, setForm] = useState<{
     account: string;
     nature: Nature;
@@ -175,6 +187,24 @@ function ClassificationPage() {
       );
       setForm({ ...form, account: "" });
       setRulePattern("");
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const classifyBalance = useMutation({
+    mutationFn: () =>
+      applyBalanceClassification({
+        data: {
+          clientId,
+          entryIds: selected,
+          account: form.account.trim(),
+          balanceGroup,
+        },
+      }),
+    onSuccess: (result) => {
+      toast.success(`${result.updated} lançamento(s) confirmados no Balanço Patrimonial.`);
+      setForm({ ...form, account: "" });
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -408,103 +438,165 @@ function ClassificationPage() {
             <>
               <div className="mt-5 grid gap-4 lg:grid-cols-4">
                 <div className="space-y-2">
-                  <Label htmlFor="account">Conta gerencial</Label>
+                  <Label>Demonstrativo</Label>
+                  <Select
+                    value={statementType}
+                    onValueChange={(value) => setStatementType(value as StatementType)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATEMENT_TYPES.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {STATEMENT_TYPE_LABEL[item]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="account">
+                    {statementType === "balanco" ? "Conta patrimonial" : "Conta gerencial"}
+                  </Label>
                   <Input
                     id="account"
                     maxLength={120}
-                    placeholder="Combustível, Salários..."
+                    placeholder={
+                      statementType === "balanco"
+                        ? "Empréstimos e Financiamentos..."
+                        : "Combustível, Salários..."
+                    }
                     value={form.account}
                     onChange={(e) => setForm({ ...form, account: e.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Natureza</Label>
-                  <Select
-                    value={form.nature}
-                    onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {NATURES.map((n) => (
-                        <SelectItem key={n} value={n}>
-                          {NATURE_LABEL[n]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Comportamento</Label>
-                  <Select
-                    value={form.behavior}
-                    onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BEHAVIORS.map((b) => (
-                        <SelectItem key={b} value={b}>
-                          {BEHAVIOR_LABEL[b]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Área</Label>
-                  <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Sem área</SelectItem>
-                      {AREAS.map((a) => (
-                        <SelectItem key={a} value={a}>
-                          {a}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
-                <div className="flex items-center gap-3">
-                  <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
-                  <Label htmlFor="rule">Aprender como regra do cliente</Label>
-                </div>
-                {createRule && (
-                  <>
+                {statementType === "balanco" ? (
+                  <div className="space-y-2">
+                    <Label>Grupo patrimonial</Label>
                     <Select
-                      value={ruleField}
-                      onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
+                      value={balanceGroup}
+                      onValueChange={(value) => setBalanceGroup(value as BalanceGroup)}
                     >
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="description">Padrão na descrição</SelectItem>
-                        <SelectItem value="counterparty">Fornecedor</SelectItem>
+                        {BALANCE_GROUPS.map((group) => (
+                          <SelectItem key={group} value={group}>
+                            {BALANCE_GROUP_LABEL[group]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                    <Input
-                      className="w-64"
-                      maxLength={200}
-                      placeholder="Texto do padrão (opcional)"
-                      value={rulePattern}
-                      onChange={(e) => setRulePattern(e.target.value)}
-                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Natureza</Label>
+                      <Select
+                        value={form.nature}
+                        onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {NATURES.map((n) => (
+                            <SelectItem key={n} value={n}>
+                              {NATURE_LABEL[n]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Comportamento</Label>
+                      <Select
+                        value={form.behavior}
+                        onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BEHAVIORS.map((b) => (
+                            <SelectItem key={b} value={b}>
+                              {BEHAVIOR_LABEL[b]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </>
                 )}
               </div>
+
+              {statementType === "resultado" && (
+                <>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-4">
+                    <div className="space-y-2 lg:col-start-4">
+                      <Label>Área</Label>
+                      <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE}>Sem área</SelectItem>
+                          {AREAS.map((a) => (
+                            <SelectItem key={a} value={a}>
+                              {a}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
+                    <div className="flex items-center gap-3">
+                      <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
+                      <Label htmlFor="rule">Aprender como regra do cliente</Label>
+                    </div>
+                    {createRule && (
+                      <>
+                        <Select
+                          value={ruleField}
+                          onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="description">Padrão na descrição</SelectItem>
+                            <SelectItem value="counterparty">Fornecedor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="w-64"
+                          maxLength={200}
+                          placeholder="Texto do padrão (opcional)"
+                          value={rulePattern}
+                          onChange={(e) => setRulePattern(e.target.value)}
+                        />
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {statementType === "balanco" && (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Movimentos patrimoniais ficam confirmados, são rastreados no Balanço e não entram na DRE.
+                </p>
+              )}
             </>
           )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {status !== "sugerido" && (
+            {status !== "sugerido" && statementType === "resultado" && (
               <Button
                 onClick={() => {
                   if (!form.account.trim()) {
@@ -518,12 +610,26 @@ function ClassificationPage() {
                 Confirmar classificação
               </Button>
             )}
+            {status !== "sugerido" && statementType === "balanco" && (
+              <Button
+                onClick={() => {
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta patrimonial.");
+                    return;
+                  }
+                  classifyBalance.mutate();
+                }}
+                disabled={classifyBalance.isPending}
+              >
+                {classifyBalance.isPending ? "Confirmando..." : "Confirmar no Balanço"}
+              </Button>
+            )}
             {status === "sugerido" && (
               <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
                 {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
               </Button>
             )}
-            {status !== "sugerido" && (
+            {status !== "sugerido" && statementType === "resultado" && (
               <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
@@ -588,8 +694,9 @@ function ClassificationPage() {
                     <>
                       <p>{row.account}</p>
                       <p className="text-xs text-muted-foreground">
-                        {NATURE_LABEL[row.nature as Nature]} ·{" "}
-                        {BEHAVIOR_LABEL[row.behavior as Behavior]}
+                        {row.statement_type === "balanco"
+                          ? `Balanço · ${BALANCE_GROUP_LABEL[row.balance_group as BalanceGroup] ?? "Sem grupo"}`
+                          : `${NATURE_LABEL[row.nature as Nature]} · ${BEHAVIOR_LABEL[row.behavior as Behavior]}`}
                       </p>
                     </>
                   ) : (
