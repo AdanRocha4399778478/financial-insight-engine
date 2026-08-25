@@ -11,6 +11,7 @@ import {
   listEntries,
   suggestWithAI,
 } from "@/lib/entries.functions";
+import { confirmCurrentClassifications } from "@/lib/confirm-current-classifications.functions";
 import {
   AREAS,
   BEHAVIORS,
