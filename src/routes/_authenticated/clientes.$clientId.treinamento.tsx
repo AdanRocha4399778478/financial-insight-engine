@@ -30,6 +30,25 @@ const mismatchLabel = {
   no_candidate: "sem candidato",
 } as const;
 
+const identityGapReasonLabel = {
+  direction_only_from_amount: "direção encontrada pelo valor",
+  direction_mismatch: "direção divergente",
+  operation_mismatch: "tipo de operação divergente",
+  identity_near: "identidade próxima",
+  identity_mismatch: "identidade distante",
+} as const;
+
+const operationLabel = {
+  financial_charge: "encargo financeiro",
+  financing_principal: "principal de financiamento",
+  boleto: "boleto/cobrança",
+  pix: "PIX",
+  transfer: "transferência",
+  cheque: "cheque",
+  payment: "pagamento",
+  neutral: "não identificado",
+} as const;
+
 const warningLabel: Record<ErinhoTrainingWarning["code"], string> = {
   financing_flow: "financiamento",
   interaccount_transfer: "transferência entre contas",
@@ -242,6 +261,68 @@ function TrainingPage() {
                 <Metric label="Cobertura estruturada potencial" value={`${coverage.structuredCoveragePct}%`} />
                 <Metric label="Cobertura combinada potencial" value={`${coverage.combinedCoveragePct}%`} />
               </div>
+
+              {coverage.identityGapDiagnostics.length > 0 && (
+                <div className="mt-5 rounded-lg border border-border bg-card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-medium">Por que não casou?</h4>
+                      <p className="mt-1 text-xs text-muted-foreground">Diagnóstico somente-leitura das identidades sem cobertura. O sinal do valor pode explicar direção aqui, mas não altera o classificador.</p>
+                    </div>
+                    <Badge variant="secondary">{coverage.identityGapDiagnostics.length} amostra(s)</Badge>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <Metric label="Direção só pelo valor" value={coverage.identityGapReasonCounts.direction_only_from_amount} />
+                    <Metric label="Direção divergente" value={coverage.identityGapReasonCounts.direction_mismatch} />
+                    <Metric label="Operação divergente" value={coverage.identityGapReasonCounts.operation_mismatch} />
+                    <Metric label="Identidade próxima" value={coverage.identityGapReasonCounts.identity_near} />
+                    <Metric label="Identidade distante" value={coverage.identityGapReasonCounts.identity_mismatch} />
+                  </div>
+
+                  <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">Pendência</th>
+                          <th className="px-4 py-3">Melhor histórico</th>
+                          <th className="px-4 py-3">Score</th>
+                          <th className="px-4 py-3">Direção</th>
+                          <th className="px-4 py-3">Operação</th>
+                          <th className="px-4 py-3">Motivos</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {coverage.identityGapDiagnostics.map((item) => (
+                          <tr key={`${item.pendingKey}-${item.candidateKey}`}>
+                            <td className="max-w-sm px-4 py-3 text-xs">
+                              <p className="font-mono break-words">{item.pendingKey}</p>
+                              <p className="mt-1 break-words text-muted-foreground">{item.pendingDescription}</p>
+                            </td>
+                            <td className="max-w-sm px-4 py-3 text-xs">
+                              <p className="font-mono break-words">{item.candidateKey}</p>
+                              <p className="mt-1">{item.candidateAccount}</p>
+                            </td>
+                            <td className="px-4 py-3"><Badge variant="outline">{item.score}%</Badge></td>
+                            <td className="px-4 py-3 text-xs">
+                              <p>{item.pendingDirection ?? "—"} → {item.candidateDirection ?? "—"}</p>
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              <p>{operationLabel[item.pendingOperation]} → {operationLabel[item.candidateOperation]}</p>
+                            </td>
+                            <td className="max-w-xs px-4 py-3">
+                              <div className="flex flex-wrap gap-1">
+                                {item.reasons.map((reason) => <Badge key={reason} variant="secondary">{identityGapReasonLabel[reason]}</Badge>)}
+                              </div>
+                              <p className="mt-2 text-xs text-muted-foreground">Similaridade de identidade: {Math.round(item.tokenSimilarity * 100)}%</p>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {coverage.structuredSuggestions.length > 0 && (
                 <div className="mt-5">
