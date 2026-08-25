@@ -95,6 +95,63 @@ export const getDreData = createServerFn({ method: "GET" })
     };
   });
 
+export const getClientDataRange = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ clientId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const [firstEntryResult, lastEntryResult, firstFactResult, lastFactResult] = await Promise.all([
+      context.supabase
+        .from("entries")
+        .select("entry_date")
+        .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
+        .in("status", ["auto", "confirmado", "sugerido"])
+        .order("entry_date", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("entries")
+        .select("entry_date")
+        .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
+        .in("status", ["auto", "confirmado", "sugerido"])
+        .order("entry_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("dre_facts")
+        .select("period")
+        .eq("client_id", data.clientId)
+        .order("period", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("dre_facts")
+        .select("period")
+        .eq("client_id", data.clientId)
+        .order("period", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const errors = [firstEntryResult.error, lastEntryResult.error, firstFactResult.error, lastFactResult.error].filter(Boolean);
+    if (errors.length > 0) throw new Error(errors[0]!.message);
+
+    const candidatesFrom = [firstEntryResult.data?.entry_date, firstFactResult.data?.period].filter(
+      (value): value is string => Boolean(value),
+    );
+    const candidatesTo = [lastEntryResult.data?.entry_date, lastFactResult.data?.period].filter(
+      (value): value is string => Boolean(value),
+    );
+
+    if (candidatesFrom.length === 0 || candidatesTo.length === 0) return null;
+
+    return {
+      from: candidatesFrom.sort()[0]!,
+      to: candidatesTo.sort().at(-1)!,
+    };
+  });
+
 export const getComparisonData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
