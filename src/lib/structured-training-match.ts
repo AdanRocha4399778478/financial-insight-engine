@@ -24,6 +24,17 @@ const STOP_TOKENS = new Set([
   "CODIGO",
   "NSU",
   "ID",
+  "LIQUIDACAO",
+  "BOLETO",
+  "COBRANCA",
+  "PAGAMENTO",
+  "PAGTO",
+  "PIX",
+  "RECEBIMENTO",
+  "RECEBIDO",
+  "ENVIADO",
+  "REM",
+  "DES",
 ]);
 
 function splitKey(key: string): { direction: Direction; subject: string } {
@@ -33,10 +44,15 @@ function splitKey(key: string): { direction: Direction; subject: string } {
     return { direction: match[1] as Exclude<Direction, null>, subject: match[2] };
   }
 
-  // normalize() removes the pipe from ENTRADA|X, so preserve the original prefix too.
   if (key.startsWith("ENTRADA|")) return { direction: "ENTRADA", subject: normalize(key.slice(8)) };
   if (key.startsWith("SAIDA|")) return { direction: "SAIDA", subject: normalize(key.slice(6)) };
   return { direction: null, subject: normalized };
+}
+
+function directionFromAmount(amount: number): Direction {
+  if (amount > 0) return "ENTRADA";
+  if (amount < 0) return "SAIDA";
+  return null;
 }
 
 function identityClass(subject: string): IdentityClass {
@@ -58,9 +74,7 @@ function stableTokens(subject: string): string[] {
 }
 
 function compatibleClass(a: IdentityClass, b: IdentityClass): boolean {
-  if (a === b) return true;
-  if (a === "neutral" || b === "neutral") return false;
-  return false;
+  return a !== "neutral" && a === b;
 }
 
 function structuredSimilarity(a: string, b: string): number {
@@ -75,18 +89,22 @@ function structuredSimilarity(a: string, b: string): number {
   return common / Math.max(aTokens.size, bTokens.size);
 }
 
+function classificationKey(item: HistoryLike): string {
+  return `${item.account}|${item.nature}|${item.behavior}|${item.area ?? ""}`;
+}
+
 /**
  * Segundo nivel conservador de matching.
  *
  * Regras de seguranca:
  * - nunca substitui historyKey exata;
- * - exige direcao conhecida e igual nos dois lados;
- * - exige a mesma classe financeira;
- * - remove apenas tokens claramente variaveis/documentais;
- * - exige pelo menos dois tokens estaveis em comum;
- * - se mais de uma classificacao historica competir pelo melhor match, nao sugere nada.
- *
- * O retorno deve ser usado inicialmente como "sugerido", nunca como classificacao automatica.
+ * - usa a direcao do historyKey quando existe e, somente como fallback, o sinal do valor;
+ * - exige direcao igual entre pendencia e historico;
+ * - exige a mesma classe financeira, nunca classe neutra;
+ * - ignora palavras da operacao e numeros para comparar a identidade economica real;
+ * - exige pelo menos dois tokens estaveis em comum e similaridade minima de 60%;
+ * - candidatos quase empatados (ate 5 p.p.) precisam apontar para a mesma classificacao;
+ * - o retorno continua sendo apenas sugestao, nunca automatico.
  */
 export function findStructuredTrainingMatch(
   entry: RawEntry,
@@ -94,19 +112,20 @@ export function findStructuredTrainingMatch(
   entryKey: string,
 ): StructuredTrainingMatch | null {
   const pending = splitKey(entryKey);
-  if (!pending.direction || !pending.subject) return null;
+  const pendingDirection = pending.direction ?? directionFromAmount(Number(entry.amount ?? 0));
+  if (!pendingDirection || !pending.subject) return null;
 
-  const pendingClass = identityClass(pending.subject);
+  const pendingClass = identityClass(`${entry.description} ${pending.subject}`);
   if (pendingClass === "neutral") return null;
 
   const candidates = history
     .map((item) => {
       const historical = splitKey(item.key);
-      if (!historical.direction || historical.direction !== pending.direction) return null;
+      if (!historical.direction || historical.direction !== pendingDirection) return null;
       if (!compatibleClass(pendingClass, identityClass(historical.subject))) return null;
 
       const similarity = structuredSimilarity(pending.subject, historical.subject);
-      if (similarity < 0.66) return null;
+      if (similarity < 0.6) return null;
       return { history: item, similarity };
     })
     .filter((item): item is { history: HistoryLike; similarity: number } => Boolean(item))
@@ -115,12 +134,8 @@ export function findStructuredTrainingMatch(
   const best = candidates[0];
   if (!best) return null;
 
-  const competing = candidates.filter((candidate) => candidate.similarity === best.similarity);
-  const classifications = new Set(
-    competing.map(
-      ({ history: item }) => `${item.account}|${item.nature}|${item.behavior}|${item.area ?? ""}`,
-    ),
-  );
+  const nearBest = candidates.filter((candidate) => best.similarity - candidate.similarity <= 0.05);
+  const classifications = new Set(nearBest.map(({ history: item }) => classificationKey(item)));
   if (classifications.size > 1) return null;
 
   return {
