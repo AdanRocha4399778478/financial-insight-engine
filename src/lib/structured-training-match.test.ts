@@ -39,6 +39,20 @@ describe("structured training matcher", () => {
     expect(result?.history.account).toBe("CMV");
   });
 
+  it("uses the full description when the pending history key was truncated", () => {
+    const result = findStructuredTrainingMatch(
+      {
+        ...entry,
+        description: "LIQUIDACAO BOLETO 34191 79001 METALPARTS LTDA",
+        amount: -250,
+      },
+      [history("SAIDA|LIQUIDACAO BOLETO METALPARTS LTDA 998877")],
+      "LIQUIDACAO BOLETO 34191 79001",
+    );
+
+    expect(result?.history.account).toBe("CMV");
+  });
+
   it("uses positive amount as direction fallback for incoming PIX", () => {
     const result = findStructuredTrainingMatch(
       {
