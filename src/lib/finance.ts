@@ -169,6 +169,18 @@ export function buildDre(rows: DreRow[]): DreResult {
         else if (row.behavior === "fixo") r.despesasFixas += v;
         else r.despesasMistas += v;
         break;
+      case "receita_financeira":
+        r.receitasFinanceiras += v;
+        break;
+      case "despesa_financeira":
+        r.despesasFinanceiras += v;
+        break;
+      case "outra_receita":
+        r.outrasReceitas += v;
+        break;
+      case "outra_despesa":
+        r.outrasDespesas += v;
+        break;
     }
   }
 
