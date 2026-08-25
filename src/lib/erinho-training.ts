@@ -112,18 +112,20 @@ function semanticWarning(
   const detailedDescription = text(source["Descrição Detalhada"]) || null;
   const haystack = normalize(`${description} ${detailedDescription ?? ""}`);
 
-  if (/\b(LIBERACAO CREDITO|EMPRESTIMO|FINANCIAMENTO)\b/.test(haystack)) {
-    if (!["excluido", "transferencia"].includes(mapping.nature)) {
+  const isFinancialCharge = /\b(IOF|JUROS|TARIFA|ENCARGO|MULTA)\b/.test(haystack);
+  if (isFinancialCharge) {
+    if (!["despesa_financeira", "excluido"].includes(mapping.nature)) {
       return {
         sourceRowNumber,
-        code: "financing_flow",
+        code: "financial_charge",
         account,
         description,
         detailedDescription,
         reason:
-          "Fluxo de financiamento identificado. O principal recebido ou amortizado normalmente não pertence ao resultado; juros e encargos devem ser separados antes de ensinar a classificação.",
+          "Encargo financeiro identificado, mas a categoria histórica não está como despesa financeira ou excluída. Revisar antes de ensinar o padrão.",
       };
     }
+    return null;
   }
 
   if (/\b(TRANSF ENTRE CONTAS|TRANSFERENCIA ENTRE CONTAS|TRANSF INTERNA|TRANSFERENCIA INTERNA)\b/.test(haystack)) {
@@ -140,16 +142,16 @@ function semanticWarning(
     }
   }
 
-  if (/\b(IOF|JUROS|TARIFA BANCARIA|TARIFA COBRANCA)\b/.test(haystack)) {
-    if (!["despesa_financeira", "excluido"].includes(mapping.nature)) {
+  if (/\b(LIBERACAO CREDITO|EMPRESTIMO|FINANCIAMENTO|AMORTIZACAO)\b/.test(haystack)) {
+    if (!["excluido", "transferencia"].includes(mapping.nature)) {
       return {
         sourceRowNumber,
-        code: "financial_charge",
+        code: "financing_flow",
         account,
         description,
         detailedDescription,
         reason:
-          "Encargo financeiro identificado, mas a categoria histórica não está como despesa financeira ou excluída. Revisar antes de ensinar o padrão.",
+          "Fluxo do principal de financiamento identificado. O valor recebido ou amortizado normalmente não pertence ao resultado; revisar antes de ensinar a classificação.",
       };
     }
   }
