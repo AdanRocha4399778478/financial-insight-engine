@@ -183,7 +183,8 @@ function ClassificationPage() {
   const bulkConfirm = useMutation({
     mutationFn: () => confirm({ data: { clientId, entryIds: selected } }),
     onSuccess: (r) => {
-      toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+      if (r.updated > 0) toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+      else toast.info("Nenhuma sugestão elegível para confirmar.");
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -192,7 +193,8 @@ function ClassificationPage() {
   const confirmVisibleSuggestions = useMutation({
     mutationFn: () => confirm({ data: { clientId, entryIds: rows.map((row) => row.id) } }),
     onSuccess: (r) => {
-      toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+      if (r.updated > 0) toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+      else toast.info("Nenhuma sugestão elegível para confirmar.");
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -516,9 +518,11 @@ function ClassificationPage() {
                 Confirmar classificação
               </Button>
             )}
-            <Button variant={status === "sugerido" ? "default" : "secondary"} onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
-              {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
-            </Button>
+            {status === "sugerido" && (
+              <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
+                {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
+              </Button>
+            )}
             {status !== "sugerido" && (
               <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
                 <Sparkles className="mr-2 h-4 w-4" />
