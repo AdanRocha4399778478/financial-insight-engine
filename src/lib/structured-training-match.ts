@@ -29,7 +29,9 @@ const STOP_TOKENS = new Set([
 function splitKey(key: string): { direction: Direction; subject: string } {
   const normalized = normalize(key);
   const match = normalized.match(/^(ENTRADA|SAIDA)\s+(.+)$/);
-  if (match) return { direction: match[1] as Direction, subject: match[2] };
+  if (match?.[1] && match[2]) {
+    return { direction: match[1] as Exclude<Direction, null>, subject: match[2] };
+  }
 
   // normalize() removes the pipe from ENTRADA|X, so preserve the original prefix too.
   if (key.startsWith("ENTRADA|")) return { direction: "ENTRADA", subject: normalize(key.slice(8)) };
