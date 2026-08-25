@@ -137,6 +137,11 @@ export function parseErinhoTrainingRows(sourceRows: ErinhoTrainingRow[]): Erinho
       behavior: mapping.behavior,
       area: null,
       sourceRowNumber,
+      diagnostics: {
+        rawDescription: text(source["Descrição"]) || null,
+        rawDetailedDescription: text(source["Descrição Detalhada"]) || null,
+        rawDirection: text(source["C/D"]) || null,
+      },
     });
   });
 
