@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCcw, Sparkles } from "lucide-react";
 import {
@@ -94,6 +94,7 @@ const relationLabel = {
 function ClassificationPage() {
   const { clientId } = Route.useParams();
   const queryClient = useQueryClient();
+  const entriesSectionRef = useRef<HTMLDivElement | null>(null);
 
   const fetchEntries = useServerFn(listEntries);
   const fetchPendingIdentitySummary = useServerFn(listPendingIdentitySummary);
@@ -207,7 +208,9 @@ function ClassificationPage() {
     setStatus("pendente");
     setSelected([]);
     setReclassifyMode(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.setTimeout(() => {
+      entriesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   };
 
   const classify = useMutation({
@@ -444,7 +447,7 @@ function ClassificationPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Clique em uma identidade para filtrar a fila e trabalhar apenas aquele grupo.
+            Clique em uma identidade para filtrar a fila e ir direto aos lançamentos correspondentes.
           </p>
         </section>
       )}
@@ -497,9 +500,23 @@ function ClassificationPage() {
         </section>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0">
-          <div className="max-h-[72vh] overflow-auto rounded-lg border border-border">
+      <div ref={entriesSectionRef} className="scroll-mt-24 space-y-4">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <p className="font-display text-sm font-semibold">Lançamentos</p>
+              <p className="text-xs text-muted-foreground">
+                {rows.length} item(ns) neste filtro{search.trim() ? ` · filtro: ${search.trim()}` : ""}
+              </p>
+            </div>
+            {search.trim() && (
+              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+                Limpar filtro
+              </Button>
+            )}
+          </div>
+
+          <div className="max-h-[68vh] overflow-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-20 bg-muted font-mono text-xs uppercase tracking-wider text-muted-foreground shadow-sm">
                 <tr>
@@ -541,7 +558,7 @@ function ClassificationPage() {
                         type="button"
                         onClick={() => setSelected([row.id])}
                         className="block w-full text-left"
-                        title="Abrir lançamento no painel lateral"
+                        title="Abrir lançamento no workspace"
                       >
                         <p className="truncate hover:text-primary">{row.description}</p>
                         {row.counterparty && (
@@ -592,55 +609,49 @@ function ClassificationPage() {
           </div>
         </div>
 
-        <aside className="xl:sticky xl:top-20 xl:self-start">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
+        {selectedRows.length > 0 && (
+          <section className="rounded-lg border border-primary/30 bg-card p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-display text-sm font-semibold">Workspace de classificação</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  A lista continua rolando sem perder os dados e ações da seleção.
+                  Classifique a seleção abaixo sem reduzir a largura da tabela.
                 </p>
               </div>
-              {selected.length > 0 && <Badge variant="secondary">{selected.length} selecionado(s)</Badge>}
+              <Badge variant="secondary">{selected.length} selecionado(s)</Badge>
             </div>
 
-            {selectedRows.length === 0 ? (
-              <div className="mt-5 rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-                Selecione um lançamento na tabela ou clique na descrição para abrir os detalhes aqui.
-              </div>
-            ) : (
-              <>
-                <div className="mt-5 space-y-3 rounded-lg border border-border bg-background/40 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamento</p>
-                      <p className="mt-1 break-words text-sm font-medium">{selectedRows[0]!.description}</p>
-                    </div>
-                    <p className="whitespace-nowrap font-mono text-sm font-semibold">
-                      {brl(Number(selectedRows[0]!.amount))}
-                    </p>
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <div className="space-y-3 rounded-lg border border-border bg-background/40 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamento</p>
+                    <p className="mt-1 break-words text-sm font-medium">{selectedRows[0]!.description}</p>
                   </div>
-                  {selectedRows[0]!.counterparty && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Contraparte</p>
-                      <p className="mt-1 break-words text-sm">{selectedRows[0]!.counterparty}</p>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{selectedRows[0]!.entry_date}</Badge>
-                    {selectedRows[0]!.account && <Badge variant="outline">{selectedRows[0]!.account}</Badge>}
-                    <Badge variant="outline">{STATUS_LABEL[selectedRows[0]!.status as EntryStatus]}</Badge>
-                  </div>
-                  {selectedRows.length > 1 && (
-                    <p className="text-xs text-muted-foreground">
-                      + {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}
-                    </p>
-                  )}
+                  <p className="whitespace-nowrap font-mono text-sm font-semibold">
+                    {brl(Number(selectedRows[0]!.amount))}
+                  </p>
                 </div>
+                {selectedRows[0]!.counterparty && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">Contraparte</p>
+                    <p className="mt-1 break-words text-sm">{selectedRows[0]!.counterparty}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline">{selectedRows[0]!.entry_date}</Badge>
+                  {selectedRows[0]!.account && <Badge variant="outline">{selectedRows[0]!.account}</Badge>}
+                  <Badge variant="outline">{STATUS_LABEL[selectedRows[0]!.status as EntryStatus]}</Badge>
+                </div>
+                {selectedRows.length > 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    + {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}
+                  </p>
+                )}
 
                 {isAutomaticFilter && (
                   <>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
                       <Badge variant="outline">Balanço: {selectionStats.balanco}</Badge>
                       {selectionStats.top.map(([label, count]) => (
@@ -650,15 +661,17 @@ function ClassificationPage() {
                       ))}
                     </div>
                     {selectionStats.heterogeneous && (
-                      <p className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
+                      <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
                         A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substituirá todos os selecionados pela nova classificação.
                       </p>
                     )}
                   </>
                 )}
+              </div>
 
-                {showClassificationForm && (
-                  <div className="mt-5 space-y-4">
+              <div>
+                {showClassificationForm ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div className="space-y-2">
                       <Label>Demonstrativo</Label>
                       <Select
@@ -752,7 +765,7 @@ function ClassificationPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 md:col-span-2 xl:col-span-1">
                           <Label>Área</Label>
                           <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
                             <SelectTrigger>
@@ -772,13 +785,13 @@ function ClassificationPage() {
                     )}
 
                     {statementType === "resultado" && (
-                      <div className="space-y-3 rounded-lg border border-border p-4">
+                      <div className="space-y-3 rounded-lg border border-border p-4 md:col-span-2 xl:col-span-4">
                         <div className="flex items-center gap-3">
                           <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
                           <Label htmlFor="rule">Aprender como regra do cliente</Label>
                         </div>
                         {createRule && (
-                          <>
+                          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
                             <Select
                               value={ruleField}
                               onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
@@ -797,22 +810,26 @@ function ClassificationPage() {
                               value={rulePattern}
                               onChange={(e) => setRulePattern(e.target.value)}
                             />
-                          </>
+                          </div>
                         )}
                       </div>
                     )}
 
                     {statementType === "balanco" && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-4">
                         Movimentos patrimoniais ficam confirmados, são rastreados no Balanço e não entram na DRE.
                       </p>
                     )}
                   </div>
+                ) : (
+                  <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                    A classificação atual já está pronta. Use as ações abaixo para confirmar ou reclassificar a seleção.
+                  </p>
                 )}
-              </>
-            )}
+              </div>
+            </div>
           </section>
-        </aside>
+        )}
       </div>
 
       {selected.length > 0 && (
