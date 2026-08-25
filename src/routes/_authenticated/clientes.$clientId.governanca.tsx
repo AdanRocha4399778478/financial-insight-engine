@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { toast } from "sonner";
 import { listAudit, listRules, setRuleActive } from "@/lib/entries.functions";
 import { deleteImport, listImports } from "@/lib/imports.functions";
@@ -60,6 +61,7 @@ function confidenceLabel(status: string | null) {
 function GovernancePage() {
   const { clientId } = Route.useParams();
   const queryClient = useQueryClient();
+  const [rulesExpanded, setRulesExpanded] = useState(false);
 
   const fetchRules = useServerFn(listRules);
   const toggleRule = useServerFn(setRuleActive);
@@ -111,50 +113,17 @@ function GovernancePage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const totalRules = rules.data?.length ?? 0;
+  const activeRules = rules.data?.filter((rule) => rule.active).length ?? 0;
+  const confirmedRules = rules.data?.filter((rule) => rule.confirmed).length ?? 0;
+  const inactiveRules = totalRules - activeRules;
+
   return (
     <div className="space-y-10">
       <section>
-        <h2 className="font-display text-lg font-semibold">Regras aprendidas</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cada confirmação humana pode virar regra e reduzir o esforço da próxima importação.
-        </p>
-        <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
-          {rules.data?.map((rule) => (
-            <div key={rule.id} className="flex flex-wrap items-center justify-between gap-4 bg-card p-4">
-              <div>
-                <p className="text-sm">
-                  <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                    {rule.match_field === "counterparty" ? "fornecedor" : "descrição"}
-                  </span>{" "}
-                  contém “{rule.pattern}”
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  → {rule.account} · {NATURE_LABEL[rule.nature as Nature]} ·{" "}
-                  {BEHAVIOR_LABEL[rule.behavior as Behavior]}
-                  {rule.client_id ? "" : " · regra global"}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {rule.confirmed && <Badge variant="secondary">Confirmada</Badge>}
-                <Switch
-                  checked={rule.active}
-                  onCheckedChange={(active) => ruleMutation.mutate({ ruleId: rule.id, active })}
-                />
-              </div>
-            </div>
-          ))}
-          {rules.data?.length === 0 && (
-            <p className="bg-card p-8 text-center text-sm text-muted-foreground">
-              Nenhuma regra criada ainda.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg font-semibold">Importações</h2>
+            <h2 className="font-display text-lg font-semibold">Importações e integridade</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Qualidade matemática de cada base importada antes de usá-la como referência financeira.
             </p>
@@ -256,6 +225,72 @@ function GovernancePage() {
             </p>
           )}
         </div>
+      </section>
+
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-lg font-semibold">Regras aprendidas</h2>
+              <Badge variant="outline">{totalRules} regras</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cada confirmação humana pode virar regra e reduzir o esforço da próxima importação.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setRulesExpanded((value) => !value)}>
+            {rulesExpanded ? "Recolher regras" : "Expandir regras"}
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Ativas</p>
+            <p className="mt-1 text-lg font-semibold">{activeRules}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Confirmadas</p>
+            <p className="mt-1 text-lg font-semibold">{confirmedRules}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Desativadas</p>
+            <p className="mt-1 text-lg font-semibold">{inactiveRules}</p>
+          </div>
+        </div>
+
+        {rulesExpanded && (
+          <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
+            {rules.data?.map((rule) => (
+              <div key={rule.id} className="flex flex-wrap items-center justify-between gap-4 bg-card p-4">
+                <div>
+                  <p className="text-sm">
+                    <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                      {rule.match_field === "counterparty" ? "fornecedor" : "descrição"}
+                    </span>{" "}
+                    contém “{rule.pattern}”
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    → {rule.account} · {NATURE_LABEL[rule.nature as Nature]} ·{" "}
+                    {BEHAVIOR_LABEL[rule.behavior as Behavior]}
+                    {rule.client_id ? "" : " · regra global"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {rule.confirmed && <Badge variant="secondary">Confirmada</Badge>}
+                  <Switch
+                    checked={rule.active}
+                    onCheckedChange={(active) => ruleMutation.mutate({ ruleId: rule.id, active })}
+                  />
+                </div>
+              </div>
+            ))}
+            {rules.data?.length === 0 && (
+              <p className="bg-card p-8 text-center text-sm text-muted-foreground">
+                Nenhuma regra criada ainda.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       <section>
