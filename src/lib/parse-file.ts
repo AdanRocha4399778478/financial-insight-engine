@@ -101,14 +101,15 @@ export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     defval: null,
-    raw: false,
+    // Preserva Date e number do XLS/XLSX. raw:false aplicava a máscara visual da
+    // planilha e podia transformar 30/04/2026 em "2026-30-04".
+    raw: true,
     blankrows: false,
   });
   if (!matrix.length) throw new Error("O arquivo não contém linhas de dados.");
   const detected = detectHeaderRow(matrix);
   return buildFromHeaderRow(matrix, detected.index);
 }
-
 
 const HINTS: Record<StandardField, string[]> = {
   entry_date: ["DATA", "DT", "DT MOVIMENTO", "DATA MOVIMENTO", "COMPETENCIA", "VENCIMENTO", "EMISSAO"],
@@ -120,7 +121,7 @@ const HINTS: Record<StandardField, string[]> = {
   original_category: ["CATEGORIA", "PLANO DE CONTAS", "CONTA", "CLASSIFICACAO"],
   cost_center: ["CENTRO DE CUSTO", "CC", "CENTRO CUSTO", "UNIDADE", "FILIAL"],
   document: ["DOCUMENTO", "NF", "NOTA", "DOC"],
-  movement_type: ["TIPO", "SITUACAO", "NATUREZA", "OPERACAO"],
+  movement_type: ["TIPO", "SITUACAO", "NATUREZA", "OPERACAO", "C/D", "D/C", "C D", "D C"],
 };
 
 export function guessMapping(columns: string[]): Partial<Record<StandardField, string>> {
@@ -131,7 +132,7 @@ export function guessMapping(columns: string[]): Partial<Record<StandardField, s
     const found = columns.find((col) => {
       if (used.has(col)) return false;
       const n = normalize(col);
-      return hints.some((h) => n === h || n.startsWith(h) || n.includes(h));
+      return hints.some((h) => n === normalize(h) || n.startsWith(normalize(h)) || n.includes(normalize(h)));
     });
     if (found) {
       mapping[field.key] = found;
@@ -153,21 +154,49 @@ export function parseNumber(value: unknown): number {
   return negative ? -n : n;
 }
 
+function validDateParts(year: number, month: number, day: number): boolean {
+  if (year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function isoDate(year: number, month: number, day: number): string | null {
+  if (!validDateParts(year, month, day)) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function parseDate(value: unknown): string | null {
   if (!value) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime()))
-    return value.toISOString().slice(0, 10);
-  const s = String(value).trim();
-  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-  if (br) {
-    const [, d, m, y] = br;
-    const year = y!.length === 2 ? `20${y}` : y!;
-    return `${year}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return isoDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
   }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return iso[0];
+
+  const s = String(value).trim();
+  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\D|$)/);
+  if (br) {
+    const day = Number(br[1]);
+    const month = Number(br[2]);
+    const rawYear = br[3]!;
+    const year = Number(rawYear.length === 2 ? `20${rawYear}` : rawYear);
+    return isoDate(year, month, day);
+  }
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\D|$)/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const second = Number(iso[2]);
+    const third = Number(iso[3]);
+    const normal = isoDate(year, second, third);
+    if (normal) return normal;
+    // Recupera exportações cuja máscara veio como YYYY-DD-MM, sem aceitar uma
+    // data impossível silenciosamente.
+    return isoDate(year, third, second);
+  }
+
   const parsed = new Date(s);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!Number.isNaN(parsed.getTime())) {
+    return isoDate(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+  }
   return null;
 }
 
@@ -213,6 +242,37 @@ export function isRepeatedHeader(row: Record<string, unknown>): boolean {
   return hits >= 2 && hits >= Math.ceil(values.length / 2);
 }
 
+function movementDirection(value: string | null): "credit" | "debit" | null {
+  const normalized = normalize(value);
+  if (!normalized) return null;
+  if (["C", "CR", "CREDITO", "CREDIT", "ENTRADA", "RECEBIMENTO"].includes(normalized)) return "credit";
+  if (["D", "DB", "DEBITO", "DEBIT", "SAIDA", "PAGAMENTO"].includes(normalized)) return "debit";
+  return null;
+}
+
+function directionFromDescription(description: string): "debit" | null {
+  const normalized = normalize(description);
+  if (!normalized) return null;
+  const debitPrefixes = [
+    "DEB ",
+    "DEBITO ",
+    "PAGAMENTO ",
+    "PIX EMIT ",
+    "PIX ENVIADO ",
+    "COMPRA CARTAO ",
+    "CARTAO VISA ",
+    "TARIFA ",
+  ];
+  return debitPrefixes.some((prefix) => normalized.startsWith(prefix)) ? "debit" : null;
+}
+
+function limitedString(value: unknown, max: number): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  return text.slice(0, max);
+}
+
 export function normalizeRows(
   rows: Record<string, unknown>[],
   mapping: Partial<Record<StandardField, string>>,
@@ -245,15 +305,25 @@ export function normalizeRows(
     }
 
     const date = parseDate(pick(row, "entry_date"));
-    const description = String(pick(row, "description") ?? "").trim();
+    const description = String(pick(row, "description") ?? "").trim().slice(0, 500);
+    const movementType = limitedString(pick(row, "movement_type"), 120);
 
     const credit = mapping.credit ? parseNumber(pick(row, "credit")) : 0;
     const debit = mapping.debit ? parseNumber(pick(row, "debit")) : 0;
     const single = mapping.amount ? parseNumber(pick(row, "amount")) : 0;
 
     let amount = 0;
-    if (credit !== 0 || debit !== 0) amount = credit !== 0 ? credit : -Math.abs(debit);
-    else amount = single;
+    if (credit !== 0 || debit !== 0) {
+      amount = credit !== 0 ? Math.abs(credit) : -Math.abs(debit);
+    } else {
+      amount = single;
+      if (amount > 0) {
+        const explicitDirection = movementDirection(movementType);
+        if (explicitDirection === "debit" || (!explicitDirection && directionFromDescription(description) === "debit")) {
+          amount = -Math.abs(amount);
+        }
+      }
+    }
 
     // Regra principal: sem movimento financeiro (crédito, débito ou valor) não é lançamento.
     if (amount === 0) {
@@ -270,12 +340,6 @@ export function normalizeRows(
       continue;
     }
 
-    const str = (f: StandardField) => {
-      const v = pick(row, f);
-      const s = v === null || v === undefined ? "" : String(v).trim();
-      return s === "" ? null : s;
-    };
-
     if (amount > 0) {
       summary.creditCount += 1;
       summary.creditTotal += amount;
@@ -287,12 +351,12 @@ export function normalizeRows(
     valid.push({
       entry_date: date,
       description: description || "(sem descrição)",
-      counterparty: str("counterparty"),
+      counterparty: limitedString(pick(row, "counterparty"), 300),
       amount,
-      movement_type: str("movement_type"),
-      original_category: str("original_category"),
-      cost_center: str("cost_center"),
-      document: str("document"),
+      movement_type: movementType,
+      original_category: limitedString(pick(row, "original_category"), 200),
+      cost_center: limitedString(pick(row, "cost_center"), 200),
+      document: limitedString(pick(row, "document"), 120),
       raw: row,
     });
   }
@@ -303,4 +367,3 @@ export function normalizeRows(
   summary.net = summary.creditTotal - summary.debitTotal;
   return { valid, invalid: summary.discarded, summary };
 }
-
