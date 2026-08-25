@@ -109,6 +109,8 @@ function ClassificationPage() {
 
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
+  const [paretoEntryIds, setParetoEntryIds] = useState<string[] | null>(null);
+  const [paretoLabel, setParetoLabel] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [reclassifyMode, setReclassifyMode] = useState(false);
   const [statementType, setStatementType] = useState<StatementType>("resultado");
@@ -124,10 +126,17 @@ function ClassificationPage() {
   const [rulePattern, setRulePattern] = useState("");
 
   const entries = useQuery({
-    queryKey: ["entries", clientId, status, search],
+    queryKey: ["entries", clientId, status, search, paretoEntryIds],
     queryFn: () =>
       fetchEntries({
-        data: { clientId, status, search: search.trim() || null, importId: null, limit: 200 },
+        data: {
+          clientId,
+          status,
+          search: paretoEntryIds ? null : search.trim() || null,
+          entryIds: paretoEntryIds,
+          importId: null,
+          limit: 200,
+        },
       }),
   });
 
@@ -196,15 +205,21 @@ function ClassificationPage() {
   const showClassificationForm =
     status !== "sugerido" && (!isAutomaticFilter || reclassifyMode);
 
+  const clearParetoFilter = () => {
+    setParetoEntryIds(null);
+    setParetoLabel(null);
+  };
+
   const refresh = () => {
     setSelected([]);
     setReclassifyMode(false);
     queryClient.invalidateQueries();
   };
 
-  const focusParetoIdentity = (historyKey: string) => {
-    const subject = historyKey.split("|").slice(1).join("|").trim();
-    setSearch(subject || historyKey);
+  const focusParetoIdentity = (item: { historyKey: string; entryIds: string[] }) => {
+    setSearch("");
+    setParetoEntryIds(item.entryIds);
+    setParetoLabel(item.historyKey);
     setStatus("pendente");
     setSelected([]);
     setReclassifyMode(false);
@@ -332,6 +347,7 @@ function ClassificationPage() {
               setStatus(filter.key);
               setSelected([]);
               setReclassifyMode(false);
+              clearParetoFilter();
             }}
             className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
               status === filter.key
@@ -356,7 +372,10 @@ function ClassificationPage() {
         <Input
           value={search}
           maxLength={120}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            clearParetoFilter();
+            setSearch(e.target.value);
+          }}
           placeholder="Buscar descrição ou fornecedor"
           className="ml-auto w-full sm:w-72"
         />
@@ -431,7 +450,7 @@ function ClassificationPage() {
                 {pendingIdentitySummary.data.items.map((item) => (
                   <tr
                     key={item.historyKey}
-                    onClick={() => focusParetoIdentity(item.historyKey)}
+                    onClick={() => focusParetoIdentity(item)}
                     className="cursor-pointer transition-colors hover:bg-muted/40"
                     title="Filtrar lançamentos desta identidade"
                   >
@@ -447,7 +466,7 @@ function ClassificationPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Clique em uma identidade para filtrar a fila e ir direto aos lançamentos correspondentes.
+            Clique em uma identidade para abrir exatamente os lançamentos que compõem aquele grupo.
           </p>
         </section>
       )}
@@ -506,11 +525,23 @@ function ClassificationPage() {
             <div>
               <p className="font-display text-sm font-semibold">Lançamentos</p>
               <p className="text-xs text-muted-foreground">
-                {rows.length} item(ns) neste filtro{search.trim() ? ` · filtro: ${search.trim()}` : ""}
+                {rows.length} item(ns) neste filtro
+                {paretoLabel
+                  ? ` · Pareto: ${paretoLabel}`
+                  : search.trim()
+                    ? ` · filtro: ${search.trim()}`
+                    : ""}
               </p>
             </div>
-            {search.trim() && (
-              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+            {(search.trim() || paretoEntryIds) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  clearParetoFilter();
+                }}
+              >
                 Limpar filtro
               </Button>
             )}
