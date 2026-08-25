@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { parseSpreadsheet } from "@/lib/parse-file";
 import { parseBandronesTrainingRows } from "@/lib/bandrones-training";
-import { parseErinhoTrainingRows } from "@/lib/erinho-training";
+import { parseErinhoTrainingRows, type ErinhoTrainingWarning } from "@/lib/erinho-training";
 import type { TrainingInputRow } from "@/lib/training-import";
 import { estimateTrainingCoverage } from "@/lib/training-coverage.functions";
 import {
@@ -30,6 +30,12 @@ const mismatchLabel = {
   no_candidate: "sem candidato",
 } as const;
 
+const warningLabel: Record<ErinhoTrainingWarning["code"], string> = {
+  financing_flow: "financiamento",
+  interaccount_transfer: "transferência entre contas",
+  financial_charge: "encargo financeiro",
+};
+
 function detectTrainingFormat(sourceRows: Record<string, unknown>[]): TrainingFormat {
   const first = sourceRows[0] ?? {};
   const keys = new Set(Object.keys(first));
@@ -47,6 +53,7 @@ function TrainingPage() {
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<TrainingInputRow[]>([]);
   const [rejected, setRejected] = useState<RejectedRow[]>([]);
+  const [semanticWarnings, setSemanticWarnings] = useState<ErinhoTrainingWarning[]>([]);
   const [format, setFormat] = useState<TrainingFormat | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -82,6 +89,7 @@ function TrainingPage() {
     setReading(true);
     setPreview(null);
     setCoverage(null);
+    setSemanticWarnings([]);
     try {
       const parsedFile = await parseSpreadsheet(selected);
       const detectedFormat = detectTrainingFormat(parsedFile.rows);
@@ -93,12 +101,14 @@ function TrainingPage() {
       setFormat(detectedFormat);
       setRows(parsedTraining.rows);
       setRejected(parsedTraining.rejected);
+      setSemanticWarnings(detectedFormat === "erinho" ? parsedTraining.warnings : []);
       await Promise.all([previewMutation.mutateAsync(parsedTraining.rows), coverageMutation.mutateAsync(parsedTraining.rows)]);
     } catch (error) {
       setFile(null);
       setFormat(null);
       setRows([]);
       setRejected([]);
+      setSemanticWarnings([]);
       setCoverage(null);
       toast.error(error instanceof Error ? error.message : "Não foi possível ler o arquivo.");
     } finally {
@@ -148,6 +158,50 @@ function TrainingPage() {
             <Metric label="Conflitos" value={conflicts.length} />
             <Metric label="Inválidas" value={invalidCount + rejected.length} />
           </div>
+
+          {semanticWarnings.length > 0 && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium">Revisão financeira recomendada</h3>
+                    <Badge variant="secondary">{semanticWarnings.length} alerta(s)</Badge>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    O histórico foi preservado como veio do cliente, mas algumas linhas podem ensinar uma classificação economicamente inadequada. Os alertas não corrigem nem excluem dados automaticamente.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-card">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Linha</th>
+                      <th className="px-4 py-3">Tipo</th>
+                      <th className="px-4 py-3">Descrição</th>
+                      <th className="px-4 py-3">Categoria histórica</th>
+                      <th className="px-4 py-3">Por que revisar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {semanticWarnings.slice(0, 30).map((warning) => (
+                      <tr key={`${warning.sourceRowNumber}-${warning.code}`}>
+                        <td className="px-4 py-3">{warning.sourceRowNumber}</td>
+                        <td className="px-4 py-3"><Badge variant="secondary">{warningLabel[warning.code]}</Badge></td>
+                        <td className="max-w-sm px-4 py-3 text-xs">
+                          <p className="break-words">{warning.description || "—"}</p>
+                          {warning.detailedDescription && <p className="mt-1 break-words text-muted-foreground">{warning.detailedDescription}</p>}
+                        </td>
+                        <td className="px-4 py-3">{warning.account}</td>
+                        <td className="max-w-lg px-4 py-3 text-xs text-muted-foreground"><p className="break-words">{warning.reason}</p></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {semanticWarnings.length > 30 && <p className="mt-2 text-xs text-muted-foreground">Mostrando 30 de {semanticWarnings.length} alertas.</p>}
+            </div>
+          )}
 
           {coverage && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-5">
@@ -235,7 +289,10 @@ function TrainingPage() {
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground">Serão adicionados {preview.ready} conhecimentos. Duplicidades, inválidos e conflitos ficam de fora.</p>
+            <p className="text-sm text-muted-foreground">
+              Serão adicionados {preview.ready} conhecimentos. Duplicidades, inválidos e conflitos ficam de fora.
+              {semanticWarnings.length > 0 ? ` Existem ${semanticWarnings.length} alerta(s) de revisão financeira antes da confirmação.` : ""}
+            </p>
             <Button disabled={preview.ready === 0 || importMutation.isPending} onClick={() => importMutation.mutate()}>
               {importMutation.isPending ? "Importando..." : `Confirmar ${preview.ready} conhecimentos`}
             </Button>
