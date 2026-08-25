@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { listAudit, listRules, setRuleActive } from "@/lib/entries.functions";
 import { deleteImport, listImports } from "@/lib/imports.functions";
 import { getMe, listTeam, setClientAccess } from "@/lib/clients.functions";
-import { BEHAVIOR_LABEL, NATURE_LABEL, type Behavior, type Nature } from "@/lib/finance";
+import { BEHAVIOR_LABEL, NATURE_LABEL, brl, type Behavior, type Nature } from "@/lib/finance";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +26,36 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/governa
   }),
   component: GovernancePage,
 });
+
+function integrityLabel(status: string | null) {
+  if (status === "conciliado") return "CONCILIADO";
+  if (status === "divergente") return "DIVERGENTE";
+  if (status === "fechamento_inferido") return "FECHAMENTO INFERIDO";
+  if (status === "nao_verificado") return "NÃO VERIFICADO";
+  return "SEM VERIFICAÇÃO";
+}
+
+function integrityVariant(status: string | null): "default" | "destructive" | "secondary" | "outline" {
+  if (status === "conciliado") return "default";
+  if (status === "divergente") return "destructive";
+  if (status === "fechamento_inferido") return "secondary";
+  return "outline";
+}
+
+function sourceLabel(source: string | null) {
+  if (source === "manual") return "manual";
+  if (source === "extrato") return "extrato";
+  if (source === "inferido") return "inferido";
+  return "—";
+}
+
+function confidenceLabel(status: string | null) {
+  if (status === "conciliado") return "Base validada";
+  if (status === "fechamento_inferido") return "Base com ressalva";
+  if (status === "divergente") return "Problema crítico";
+  if (status === "nao_verificado") return "Precisa revisão";
+  return "Sem avaliação";
+}
 
 function GovernancePage() {
   const { clientId } = Route.useParams();
@@ -122,29 +152,106 @@ function GovernancePage() {
       </section>
 
       <section>
-        <h2 className="font-display text-lg font-semibold">Importações</h2>
-        <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Importações</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Qualidade matemática de cada base importada antes de usá-la como referência financeira.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Conciliado = validada · Inferido = ressalva · Não verificado = revisar · Divergente = crítico
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-3">
           {imports.data?.map((imp) => (
-            <div key={imp.id} className="flex flex-wrap items-center justify-between gap-3 bg-card p-4">
-              <div>
-                <p className="text-sm font-medium">{imp.filename}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(imp.created_at).toLocaleString("pt-BR")} · {imp.valid_rows} válidos ·{" "}
-                  {imp.duplicate_rows} duplicados · {imp.pending_rows} pendentes
-                </p>
+            <div key={imp.id} className="rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-medium">{imp.filename}</p>
+                    <Badge variant={integrityVariant(imp.integrity_status)}>
+                      {integrityLabel(imp.integrity_status)}
+                    </Badge>
+                    <Badge variant="outline">{confidenceLabel(imp.integrity_status)}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {new Date(imp.created_at).toLocaleString("pt-BR")} · {imp.valid_rows} válidos ·{" "}
+                    {imp.duplicate_rows} duplicados · {imp.pending_rows} pendentes
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => importMutation.mutate(imp.id)}
+                  disabled={importMutation.isPending}
+                >
+                  Desfazer importação
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => importMutation.mutate(imp.id)}
-                disabled={importMutation.isPending}
-              >
-                Desfazer importação
-              </Button>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Saldo inicial</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {imp.opening_balance === null ? "—" : brl(imp.opening_balance)}
+                  </p>
+                  <p className="mt-1 text-[0.7rem] text-muted-foreground">Origem: {sourceLabel(imp.opening_balance_source)}</p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Saldo calculado</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {imp.calculated_balance === null ? "—" : brl(imp.calculated_balance)}
+                  </p>
+                  <p className="mt-1 text-[0.7rem] text-muted-foreground">Pela movimentação</p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Saldo final</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {imp.closing_balance === null ? "—" : brl(imp.closing_balance)}
+                  </p>
+                  <p className="mt-1 text-[0.7rem] text-muted-foreground">Origem: {sourceLabel(imp.closing_balance_source)}</p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Diferença</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {imp.balance_difference === null ? "—" : brl(imp.balance_difference)}
+                  </p>
+                  <p className="mt-1 text-[0.7rem] text-muted-foreground">
+                    Tolerância {imp.balance_tolerance === null ? "—" : brl(imp.balance_tolerance)}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Conferência</p>
+                  <p className="mt-1 text-sm font-semibold">{confidenceLabel(imp.integrity_status)}</p>
+                  <p className="mt-1 text-[0.7rem] text-muted-foreground">
+                    {imp.integrity_checked_at
+                      ? new Date(imp.integrity_checked_at).toLocaleString("pt-BR")
+                      : "Importação anterior à verificação"}
+                  </p>
+                </div>
+              </div>
+
+              {imp.integrity_status === "divergente" && (
+                <p className="mt-3 text-xs text-destructive">
+                  Esta importação não deve ser considerada financeiramente validada até a divergência ser revisada.
+                </p>
+              )}
+              {imp.integrity_status === "fechamento_inferido" && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  O fechamento matemático foi inferido. Use a base com ressalva até haver duas evidências independentes de saldo.
+                </p>
+              )}
+              {imp.integrity_status === "nao_verificado" && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Não houve evidência suficiente para validar matematicamente esta importação.
+                </p>
+              )}
             </div>
           ))}
           {imports.data?.length === 0 && (
-            <p className="bg-card p-8 text-center text-sm text-muted-foreground">
+            <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
               Nenhuma importação registrada.
             </p>
           )}
