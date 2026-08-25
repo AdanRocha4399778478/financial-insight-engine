@@ -105,12 +105,25 @@ function belongsToPendingIdentityFamily(pendingSubject: string, candidateSubject
   return common >= 2;
 }
 
+function pendingIdentitySubject(entry: RawEntry, parsedKey: { direction: Direction; subject: string }): string {
+  const counterparty = normalize(entry.counterparty);
+  if (counterparty) return counterparty;
+
+  // Quando a chave nao traz direcao, historyKey caiu no fallback dos 4 primeiros tokens.
+  // Nesse caso a identidade economica real pode estar depois desses tokens, entao usamos
+  // a descricao completa somente para o matching estruturado.
+  if (!parsedKey.direction) return normalize(entry.description);
+
+  return parsedKey.subject || normalize(entry.description);
+}
+
 /**
  * Segundo nivel conservador de matching.
  *
  * Regras de seguranca:
  * - nunca substitui historyKey exata;
  * - usa a direcao do historyKey quando existe e, somente como fallback, o sinal do valor;
+ * - quando a chave pendente veio do fallback truncado, compara usando a descricao completa;
  * - exige direcao igual entre pendencia e historico;
  * - exige a mesma classe financeira, nunca classe neutra;
  * - ignora palavras da operacao e numeros para comparar a identidade economica real;
@@ -125,9 +138,10 @@ export function findStructuredTrainingMatch(
 ): StructuredTrainingMatch | null {
   const pending = splitKey(entryKey);
   const pendingDirection = pending.direction ?? directionFromAmount(Number(entry.amount ?? 0));
-  if (!pendingDirection || !pending.subject) return null;
+  const pendingSubject = pendingIdentitySubject(entry, pending);
+  if (!pendingDirection || !pendingSubject) return null;
 
-  const pendingClass = identityClass(`${entry.description} ${pending.subject}`);
+  const pendingClass = identityClass(`${entry.description} ${pendingSubject}`);
   if (pendingClass === "neutral") return null;
 
   const compatible = history
@@ -135,8 +149,12 @@ export function findStructuredTrainingMatch(
       const historical = splitKey(item.key);
       if (!historical.direction || historical.direction !== pendingDirection) return null;
       if (!compatibleClass(pendingClass, identityClass(historical.subject))) return null;
-      if (!belongsToPendingIdentityFamily(pending.subject, historical.subject)) return null;
-      return { history: item, subject: historical.subject, similarity: structuredSimilarity(pending.subject, historical.subject) };
+      if (!belongsToPendingIdentityFamily(pendingSubject, historical.subject)) return null;
+      return {
+        history: item,
+        subject: historical.subject,
+        similarity: structuredSimilarity(pendingSubject, historical.subject),
+      };
     })
     .filter((item): item is { history: HistoryLike; subject: string; similarity: number } => Boolean(item));
 
