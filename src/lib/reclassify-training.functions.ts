@@ -10,6 +10,41 @@ const STRUCTURED_TRAINING_CONFIDENCE = 0.72;
 const STRUCTURED_TRAINING_SOURCE = "training_structured";
 const BALANCE_TRAINING_SOURCE = "training_balance_exact";
 
+/**
+ * Autoridade conceitual da origem. Nao usamos apenas o percentual de confianca:
+ * uma fonte mais recente e mais governada pode corrigir uma classificacao automatica
+ * antiga mesmo quando o score numerico antigo era maior.
+ *
+ * Confirmados humanos e ignorados nao entram no reprocessamento.
+ */
+export function classificationSourceAuthority(source: string | null | undefined): number {
+  switch (source) {
+    case "confirmacao_humana":
+    case "confirmacao_humana_balanco":
+    case "training_human_balance":
+      return 100;
+    case "regra_confirmada_cliente":
+      return 90;
+    case BALANCE_TRAINING_SOURCE:
+      return 80;
+    case STRUCTURED_TRAINING_SOURCE:
+      return 70;
+    case "historico_cliente":
+      return 60;
+    case "regra_cliente":
+      return 55;
+    case "regra_segmento":
+      return 40;
+    case "regra_geral":
+      return 30;
+    case "fornecedor":
+      return 20;
+    case "sem_correspondencia":
+    default:
+      return 0;
+  }
+}
+
 export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ clientId: z.string().uuid() }).parse(input))
@@ -32,12 +67,14 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
       .or(`client_id.eq.${data.clientId},client_id.is.null`);
     if (rulesError) throw new Error(rulesError.message);
 
+    // Somente conhecimento confirmado por humano alimenta o historico de entries.
+    // Automacoes antigas nao podem se autorreforcar durante o reprocessamento.
     const { data: historyRows, error: historyError } = await supabase
       .from("entries")
       .select("description, counterparty, account, nature, behavior, area")
       .eq("client_id", data.clientId)
       .eq("statement_type", "resultado")
-      .in("status", ["confirmado", "auto"])
+      .eq("status", "confirmado")
       .not("account", "is", null)
       .limit(5000);
     if (historyError) throw new Error(historyError.message);
@@ -112,70 +149,28 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
 
     const { history, conflicts } = mergeHistoryCandidates(candidates);
 
-    const { data: pendingRows, error: pendingError } = await supabase
+    // Reprocessa pendentes e automaticos. Confirmados humanos e ignorados ficam imutaveis.
+    const { data: rowsToReview, error: reviewError } = await supabase
       .from("entries")
-      .select("id, description, counterparty, original_category, amount, account, nature, behavior, area, status")
+      .select(
+        "id, description, counterparty, original_category, amount, account, nature, behavior, area, status, statement_type, balance_group, classification_source, confidence, excluded_from_dre",
+      )
       .eq("client_id", data.clientId)
-      .eq("status", "pendente")
+      .in("status", ["pendente", "auto"])
       .limit(5000);
-    if (pendingError) throw new Error(pendingError.message);
+    if (reviewError) throw new Error(reviewError.message);
 
     let automatic = 0;
     let suggested = 0;
     let structuredSuggested = 0;
     let balanceAutomatic = 0;
+    let revisedAutomatic = 0;
     let unchanged = 0;
     const auditRows: TablesInsert<"classification_audit">[] = [];
 
-    for (const row of pendingRows ?? []) {
+    for (const row of rowsToReview ?? []) {
       const key = historyKey({ description: row.description, counterparty: row.counterparty });
       const balanceMatch = key && !balanceConflicts.has(key) ? balanceByKey.get(key) : undefined;
-
-      if (balanceMatch) {
-        const { error: updateError } = await supabase
-          .from("entries")
-          .update({
-            account: balanceMatch.account,
-            nature: "nao_definido",
-            behavior: "nao_definido",
-            area: null,
-            statement_type: "balanco",
-            balance_group: balanceMatch.balanceGroup,
-            confidence: 1,
-            classification_source: BALANCE_TRAINING_SOURCE,
-            status: "auto",
-            excluded_from_dre: true,
-          })
-          .eq("client_id", data.clientId)
-          .eq("id", row.id)
-          .eq("status", "pendente");
-        if (updateError) throw new Error(updateError.message);
-
-        automatic += 1;
-        balanceAutomatic += 1;
-        auditRows.push({
-          client_id: data.clientId,
-          entry_id: row.id,
-          user_id: context.userId,
-          previous: {
-            account: row.account,
-            nature: row.nature,
-            behavior: row.behavior,
-            area: row.area,
-            status: row.status,
-          } as Json,
-          next: {
-            account: balanceMatch.account,
-            statement_type: "balanco",
-            balance_group: balanceMatch.balanceGroup,
-            status: "auto",
-          } as Json,
-          source: BALANCE_TRAINING_SOURCE,
-          confidence: 1,
-          became_rule: false,
-        });
-        continue;
-      }
 
       const rawEntry = {
         description: row.description,
@@ -183,6 +178,7 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
         original_category: row.original_category,
         amount: Number(row.amount),
       };
+
       const result = classifyEntry(rawEntry, {
         clientId: data.clientId,
         segment: client.segment,
@@ -190,23 +186,82 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
         history,
       });
 
-      let next = result;
-      if (result.status === "pendente" || !result.account) {
+      type NextCandidate = {
+        account: string | null;
+        nature: typeof row.nature;
+        behavior: typeof row.behavior;
+        area: string | null;
+        statementType: "resultado" | "balanco";
+        balanceGroup: "ativo" | "passivo" | "patrimonio_liquido" | null;
+        confidence: number;
+        source: string;
+        status: "auto" | "sugerido" | "pendente";
+        excludedFromDre: boolean;
+      };
+
+      let next: NextCandidate = {
+        account: result.account,
+        nature: result.nature,
+        behavior: result.behavior,
+        area: result.area,
+        statementType: "resultado",
+        balanceGroup: null,
+        confidence: result.confidence,
+        source: result.source,
+        status: result.status,
+        excludedFromDre: result.nature === "excluido",
+      };
+
+      if (
+        balanceMatch &&
+        classificationSourceAuthority(BALANCE_TRAINING_SOURCE) >
+          classificationSourceAuthority(next.source)
+      ) {
+        next = {
+          account: balanceMatch.account,
+          nature: "nao_definido",
+          behavior: "nao_definido",
+          area: null,
+          statementType: "balanco",
+          balanceGroup: balanceMatch.balanceGroup,
+          confidence: 1,
+          source: BALANCE_TRAINING_SOURCE,
+          status: "auto",
+          excludedFromDre: true,
+        };
+      }
+
+      if (next.status === "pendente" || !next.account) {
         const structured = key ? findStructuredTrainingMatch(rawEntry, history, key) : null;
-        if (!structured) {
+        if (structured) {
+          next = {
+            account: structured.history.account,
+            nature: structured.history.nature,
+            behavior: structured.history.behavior,
+            area: structured.history.area,
+            statementType: "resultado",
+            balanceGroup: null,
+            confidence: STRUCTURED_TRAINING_CONFIDENCE,
+            source: STRUCTURED_TRAINING_SOURCE,
+            status: "sugerido",
+            excludedFromDre: structured.history.nature === "excluido",
+          };
+          structuredSuggested += 1;
+        }
+      }
+
+      if (next.status === "pendente" || !next.account) {
+        unchanged += 1;
+        continue;
+      }
+
+      if (row.status === "auto") {
+        const currentAuthority = classificationSourceAuthority(row.classification_source);
+        const nextAuthority = classificationSourceAuthority(next.source);
+        if (nextAuthority <= currentAuthority) {
           unchanged += 1;
           continue;
         }
-        next = {
-          account: structured.history.account,
-          nature: structured.history.nature,
-          behavior: structured.history.behavior,
-          area: structured.history.area,
-          confidence: STRUCTURED_TRAINING_CONFIDENCE,
-          source: STRUCTURED_TRAINING_SOURCE,
-          status: "sugerido",
-        };
-        structuredSuggested += 1;
       }
 
       const { error: updateError } = await supabase
@@ -216,20 +271,22 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
           nature: next.nature,
           behavior: next.behavior,
           area: next.area,
-          statement_type: "resultado",
-          balance_group: null,
+          statement_type: next.statementType,
+          balance_group: next.balanceGroup,
           confidence: next.confidence,
           classification_source: next.source,
           status: next.status,
-          excluded_from_dre: next.nature === "excluido",
+          excluded_from_dre: next.excludedFromDre,
         })
         .eq("client_id", data.clientId)
         .eq("id", row.id)
-        .eq("status", "pendente");
+        .eq("status", row.status);
       if (updateError) throw new Error(updateError.message);
 
+      if (row.status === "auto") revisedAutomatic += 1;
       if (next.status === "auto") automatic += 1;
       else suggested += 1;
+      if (next.source === BALANCE_TRAINING_SOURCE) balanceAutomatic += 1;
 
       auditRows.push({
         client_id: data.clientId,
@@ -240,17 +297,26 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
           nature: row.nature,
           behavior: row.behavior,
           area: row.area,
+          statement_type: row.statement_type,
+          balance_group: row.balance_group,
           status: row.status,
+          classification_source: row.classification_source,
+          confidence: row.confidence,
+          excluded_from_dre: row.excluded_from_dre,
         } as Json,
         next: {
           account: next.account,
           nature: next.nature,
           behavior: next.behavior,
           area: next.area,
-          statement_type: "resultado",
+          statement_type: next.statementType,
+          balance_group: next.balanceGroup,
           status: next.status,
+          classification_source: next.source,
+          confidence: next.confidence,
+          excluded_from_dre: next.excludedFromDre,
         } as Json,
-        source: next.source,
+        source: row.status === "auto" ? `reprocess_override:${next.source}` : next.source,
         confidence: next.confidence,
         became_rule: false,
       });
@@ -264,11 +330,12 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
     }
 
     return {
-      analyzed: pendingRows?.length ?? 0,
+      analyzed: rowsToReview?.length ?? 0,
       automatic,
       suggested,
       structuredSuggested,
       balanceAutomatic,
+      revisedAutomatic,
       remaining: unchanged,
       historyExamples: history.length,
       historyConflicts: conflicts.size + balanceConflicts.size,
