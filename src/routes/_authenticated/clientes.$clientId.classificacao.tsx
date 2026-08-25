@@ -115,8 +115,33 @@ function ClassificationPage() {
     [rows, selected],
   );
 
+  const BALANCE_NATURES = ["transferencia", "excluido"];
+  const selectionStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    let balance = 0;
+    for (const row of selectedRows) {
+      if (BALANCE_NATURES.includes(String(row.nature))) balance += 1;
+      const key = row.account?.trim()
+        ? `${row.account} · ${NATURE_LABEL[row.nature as Nature]}`
+        : "Sem classificação";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    return {
+      total: selectedRows.length,
+      balance,
+      result: selectedRows.length - balance,
+      top,
+      heterogeneous: counts.size > 1,
+    };
+  }, [selectedRows]);
+
+  const isAuto = status === "auto";
+  const showForm = !isAuto || reclassifyMode;
+
   const refresh = () => {
     setSelected([]);
+    setReclassifyMode(false);
     queryClient.invalidateQueries();
   };
 
