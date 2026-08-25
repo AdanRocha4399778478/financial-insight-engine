@@ -13,6 +13,12 @@ import {
 const natureEnum = z.enum(NATURES as [string, ...string[]]);
 const behaviorEnum = z.enum(BEHAVIORS as [string, ...string[]]);
 
+const diagnosticsSchema = z.object({
+  rawDescription: z.string().max(500).nullable().optional(),
+  rawDetailedDescription: z.string().max(500).nullable().optional(),
+  rawDirection: z.string().max(80).nullable().optional(),
+}).optional();
+
 const trainingRowSchema = z.object({
   description: z.string().max(500),
   counterparty: z.string().max(240).nullable(),
@@ -22,6 +28,7 @@ const trainingRowSchema = z.object({
   behavior: behaviorEnum,
   area: z.string().max(80).nullable(),
   sourceRowNumber: z.number().int().positive(),
+  diagnostics: diagnosticsSchema,
 });
 
 function toExisting(row: {
@@ -80,7 +87,8 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
     if (existingError) throw new Error(existingError.message);
 
     const existing = (existingRows ?? []).map(toExisting);
-    const prepared = prepareTrainingBatch(data.clientId, data.rows as TrainingInputRow[], existing);
+    const inputRows = data.rows as TrainingInputRow[];
+    const prepared = prepareTrainingBatch(data.clientId, inputRows, existing);
 
     const candidates: HistoryCandidate[] = [];
     for (const row of existing) {
@@ -114,6 +122,17 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
     const accountByKey = new Map(merged.history.map((row) => [row.key, row.account]));
     const candidateKeys = [...new Set(candidates.map((row) => row.key).filter(Boolean))];
 
+    const trainingSamples = prepared.ready.slice(0, 12).map((row) => ({
+      sourceRowNumber: row.sourceRowNumber,
+      rawDescription: row.diagnostics?.rawDescription ?? null,
+      rawDetailedDescription: row.diagnostics?.rawDetailedDescription ?? null,
+      rawDirection: row.diagnostics?.rawDirection ?? null,
+      producedDescription: row.description,
+      producedCounterparty: row.counterparty,
+      historyKey: row.historyKey,
+      account: row.account,
+    }));
+
     const { data: pendingRows, error: pendingError } = await supabase
       .from("entries")
       .select("id, description, counterparty")
@@ -128,6 +147,7 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
     const matchedKeys = new Set<string>();
     const conflictMatchedKeys = new Set<string>();
     const uncoveredKeys = new Set<string>();
+    const pendingSampleByKey = new Map<string, { description: string; counterparty: string | null }>();
 
     for (const row of pendingRows ?? []) {
       const key = historyKey({ description: row.description, counterparty: row.counterparty });
@@ -139,7 +159,12 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
         matchedKeys.add(key);
       } else {
         uncovered += 1;
-        if (key) uncoveredKeys.add(key);
+        if (key) {
+          uncoveredKeys.add(key);
+          if (!pendingSampleByKey.has(key)) {
+            pendingSampleByKey.set(key, { description: row.description, counterparty: row.counterparty });
+          }
+        }
       }
     }
 
@@ -155,8 +180,11 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
         if (nextRelation === "direction_mismatch") break;
       }
 
+      const pendingSample = pendingSampleByKey.get(pendingKey);
       return {
         pendingKey,
+        pendingDescription: pendingSample?.description ?? null,
+        pendingCounterparty: pendingSample?.counterparty ?? null,
         candidateKey,
         candidateAccount: candidateKey ? accountByKey.get(candidateKey) ?? null : null,
         relation,
@@ -179,5 +207,6 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
         uncovered: [...uncoveredKeys].slice(0, 8),
       },
       mismatchDiagnostics,
+      trainingSamples,
     };
   });
