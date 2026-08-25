@@ -5,6 +5,7 @@ import { BEHAVIORS, NATURES } from "./finance";
 import { historyKey } from "./classify";
 import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
 import { findStructuredTrainingMatch } from "./structured-training-match";
+import { findBestIdentityGapDiagnostic } from "./identity-diagnostics";
 import {
   prepareTrainingBatch,
   type ExistingTrainingExample,
@@ -165,7 +166,15 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
     const structuredMatchedKeys = new Set<string>();
     const conflictMatchedKeys = new Set<string>();
     const uncoveredKeys = new Set<string>();
-    const pendingSampleByKey = new Map<string, { description: string; counterparty: string | null }>();
+    const pendingSampleByKey = new Map<
+      string,
+      {
+        description: string;
+        counterparty: string | null;
+        originalCategory: string | null;
+        amount: number;
+      }
+    >();
     const structuredSuggestions = new Map<
       string,
       {
@@ -215,7 +224,12 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
           uncovered += 1;
           uncoveredKeys.add(key);
           if (!pendingSampleByKey.has(key)) {
-            pendingSampleByKey.set(key, { description: row.description, counterparty: row.counterparty });
+            pendingSampleByKey.set(key, {
+              description: row.description,
+              counterparty: row.counterparty,
+              originalCategory: row.original_category,
+              amount: Number(row.amount ?? 0),
+            });
           }
         }
       } else {
@@ -246,6 +260,44 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
       };
     });
 
+    const identityGapDiagnostics = [...uncoveredKeys]
+      .map((pendingKey) => {
+        const pendingSample = pendingSampleByKey.get(pendingKey);
+        if (!pendingSample) return null;
+        const diagnostic = findBestIdentityGapDiagnostic(
+          {
+            description: pendingSample.description,
+            counterparty: pendingSample.counterparty,
+            original_category: pendingSample.originalCategory,
+            amount: pendingSample.amount,
+          },
+          merged.history,
+        );
+        if (!diagnostic) return null;
+        return {
+          ...diagnostic,
+          pendingDescription: pendingSample.description,
+          pendingCounterparty: pendingSample.counterparty,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
+
+    const identityGapReasonCounts = identityGapDiagnostics.reduce(
+      (acc, item) => {
+        for (const reason of item.reasons) acc[reason] += 1;
+        return acc;
+      },
+      {
+        direction_only_from_amount: 0,
+        direction_mismatch: 0,
+        operation_mismatch: 0,
+        identity_near: 0,
+        identity_mismatch: 0,
+      },
+    );
+
     const total = pendingRows?.length ?? 0;
     const exactCoveragePct = total > 0 ? Number(((safeMatches / total) * 100).toFixed(1)) : 0;
     const structuredCoveragePct = total > 0 ? Number(((structuredMatches / total) * 100).toFixed(1)) : 0;
@@ -273,6 +325,8 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
       },
       structuredSuggestions: [...structuredSuggestions.values()].slice(0, 12),
       mismatchDiagnostics,
+      identityGapDiagnostics,
+      identityGapReasonCounts,
       trainingSamples,
     };
   });
