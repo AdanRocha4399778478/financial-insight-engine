@@ -1,6 +1,12 @@
 import { fingerprint, historyKey, normalize } from "./classify";
 import type { Behavior, Nature } from "./finance";
 
+export interface TrainingSourceDiagnostics {
+  rawDescription?: string | null;
+  rawDetailedDescription?: string | null;
+  rawDirection?: string | null;
+}
+
 export interface TrainingInputRow {
   description: string;
   counterparty: string | null;
@@ -10,6 +16,7 @@ export interface TrainingInputRow {
   behavior: Behavior;
   area: string | null;
   sourceRowNumber: number;
+  diagnostics?: TrainingSourceDiagnostics;
 }
 
 export interface ExistingTrainingExample {
