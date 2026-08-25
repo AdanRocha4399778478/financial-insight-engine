@@ -484,11 +484,11 @@ function ImportPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Linhas lidas</p>
-                  <p className="mt-1 text-xl font-semibold">{normalized.summary.totalRows}</p>
+                  <p className="mt-1 text-xl font-semibold">{normalized.summary.read}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamentos válidos</p>
-                  <p className="mt-1 text-xl font-semibold">{normalized.summary.validRows}</p>
+                  <p className="mt-1 text-xl font-semibold">{normalized.summary.valid}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Entradas</p>
@@ -631,11 +631,11 @@ function ImportPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Contas</p>
-                  <p className="mt-1 text-xl font-semibold">{dreResult.accounts}</p>
+                  <p className="mt-1 text-xl font-semibold">{dreResult.accounts.length}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Períodos</p>
-                  <p className="mt-1 text-xl font-semibold">{dreResult.periods}</p>
+                  <p className="mt-1 text-xl font-semibold">{structure.periods.length}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Valores</p>
