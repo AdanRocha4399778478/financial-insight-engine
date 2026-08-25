@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalize } from "./classify";
 import { STANDARD_FIELDS, type StandardField } from "./finance";
+import { inferBalancesFromRunningBalance } from "./import-balance-integrity";
 
 export interface ParsedFile {
   columns: string[];
@@ -132,6 +133,7 @@ const HINTS: Record<StandardField, string[]> = {
   amount: ["VALOR", "VL LANCAMENTO", "VL", "MONTANTE", "TOTAL"],
   credit: ["CREDITO", "ENTRADA", "RECEBIMENTO"],
   debit: ["DEBITO", "SAIDA", "PAGAMENTO"],
+  balance: ["SALDO", "SALDO R$", "SALDO CONTA", "SALDO DA CONTA", "SALDO DISPONIVEL"],
   original_category: ["CATEGORIA", "PLANO DE CONTAS", "CONTA", "CLASSIFICACAO"],
   cost_center: ["CENTRO DE CUSTO", "CC", "CENTRO CUSTO", "UNIDADE", "FILIAL"],
   document: ["DOCUMENTO", "NF", "NOTA", "DOC"],
@@ -166,6 +168,12 @@ export function parseNumber(value: unknown): number {
   const n = Number(s.replace(/[^0-9.]/g, ""));
   if (Number.isNaN(n)) return 0;
   return negative ? -n : n;
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = parseNumber(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function validDateParts(year: number, month: number, day: number): boolean {
@@ -217,6 +225,7 @@ export interface NormalizedRow {
   description: string;
   counterparty: string | null;
   amount: number;
+  balance: number | null;
   movement_type: string | null;
   original_category: string | null;
   cost_center: string | null;
@@ -327,6 +336,7 @@ export function normalizeRows(
     const date = parseDate(pick(row, "entry_date"));
     const description = String(pick(row, "description") ?? "").trim().slice(0, 500);
     const movementType = limitedString(pick(row, "movement_type"), 120);
+    const runningBalance = mapping.balance ? parseOptionalNumber(pick(row, "balance")) : null;
 
     const credit = mapping.credit ? parseNumber(pick(row, "credit")) : 0;
     const debit = mapping.debit ? parseNumber(pick(row, "debit")) : 0;
@@ -347,14 +357,15 @@ export function normalizeRows(
 
     if (isBalanceDescription(description)) {
       summary.discardedBalance += 1;
-      if (amount !== 0) summary.balanceRows.push({ description, value: amount });
+      const balanceValue = runningBalance ?? amount;
+      if (balanceValue !== 0) summary.balanceRows.push({ description, value: balanceValue });
       continue;
     }
 
     if (amount === 0) {
       summary.discardedNoMovement += 1;
       if (description) {
-        const balance = parseNumber(row[Object.keys(row)[Object.keys(row).length - 1] ?? ""]);
+        const balance = runningBalance ?? parseNumber(row[Object.keys(row)[Object.keys(row).length - 1] ?? ""]);
         if (balance !== 0) summary.balanceRows.push({ description, value: balance });
       }
       continue;
@@ -378,12 +389,25 @@ export function normalizeRows(
       description: description || "(sem descrição)",
       counterparty: limitedString(pick(row, "counterparty"), 300),
       amount,
+      balance: runningBalance,
       movement_type: movementType,
       original_category: limitedString(pick(row, "original_category"), 200),
       cost_center: limitedString(pick(row, "cost_center"), 200),
       document: limitedString(pick(row, "document"), 120),
       raw: row,
     });
+  }
+
+  if (mapping.balance && valid.length >= 2) {
+    const inferred = inferBalancesFromRunningBalance(
+      valid.map((row) => ({ amount: row.amount, balance: row.balance })),
+    );
+    if (inferred.openingBalance !== null && inferred.closingBalance !== null) {
+      summary.balanceRows.push(
+        { description: "SALDO INICIAL (COLUNA SALDO)", value: inferred.openingBalance },
+        { description: "SALDO FINAL (COLUNA SALDO)", value: inferred.closingBalance },
+      );
+    }
   }
 
   summary.valid = valid.length;
