@@ -42,6 +42,27 @@ function toExisting(row: {
   };
 }
 
+function subjectOf(key: string): string {
+  return key.replace(/^(ENTRADA|SAIDA)\|/, "");
+}
+
+function relationFor(pendingKey: string, trainingKey: string): "direction_mismatch" | "partial_identity" | null {
+  const pendingSubject = subjectOf(pendingKey);
+  const trainingSubject = subjectOf(trainingKey);
+
+  if (pendingSubject === trainingSubject && pendingKey !== trainingKey) return "direction_mismatch";
+
+  if (
+    pendingSubject.length >= 8 &&
+    trainingSubject.length >= 8 &&
+    (pendingSubject.includes(trainingSubject) || trainingSubject.includes(pendingSubject))
+  ) {
+    return "partial_identity";
+  }
+
+  return null;
+}
+
 export const estimateTrainingCoverage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
@@ -90,6 +111,8 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
       ...merged.conflicts,
       ...prepared.conflicts.map((conflict) => conflict.historyKey),
     ]);
+    const accountByKey = new Map(merged.history.map((row) => [row.key, row.account]));
+    const candidateKeys = [...new Set(candidates.map((row) => row.key).filter(Boolean))];
 
     const { data: pendingRows, error: pendingError } = await supabase
       .from("entries")
@@ -120,6 +143,26 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
       }
     }
 
+    const mismatchDiagnostics = [...uncoveredKeys].slice(0, 12).map((pendingKey) => {
+      let candidateKey: string | null = null;
+      let relation: "direction_mismatch" | "partial_identity" | "no_candidate" = "no_candidate";
+
+      for (const trainingKey of candidateKeys) {
+        const nextRelation = relationFor(pendingKey, trainingKey);
+        if (!nextRelation) continue;
+        candidateKey = trainingKey;
+        relation = nextRelation;
+        if (nextRelation === "direction_mismatch") break;
+      }
+
+      return {
+        pendingKey,
+        candidateKey,
+        candidateAccount: candidateKey ? accountByKey.get(candidateKey) ?? null : null,
+        relation,
+      };
+    });
+
     const total = pendingRows?.length ?? 0;
     return {
       totalPending: total,
@@ -135,5 +178,6 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
         conflicts: [...conflictMatchedKeys].slice(0, 8),
         uncovered: [...uncoveredKeys].slice(0, 8),
       },
+      mismatchDiagnostics,
     };
   });
