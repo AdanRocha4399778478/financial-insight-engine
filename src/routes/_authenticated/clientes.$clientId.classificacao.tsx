@@ -12,6 +12,7 @@ import {
   suggestWithAI,
 } from "@/lib/entries.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
+import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
 import {
   AREAS,
   BEHAVIORS,
@@ -78,6 +79,7 @@ function ClassificationPage() {
   const queryClient = useQueryClient();
 
   const fetchEntries = useServerFn(listEntries);
+  const fetchPendingIdentitySummary = useServerFn(listPendingIdentitySummary);
   const applyClassification = useServerFn(classifyEntries);
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
@@ -103,6 +105,11 @@ function ClassificationPage() {
       fetchEntries({
         data: { clientId, status, search: search.trim() || null, importId: null, limit: 200 },
       }),
+  });
+
+  const pendingIdentitySummary = useQuery({
+    queryKey: ["pending-identity-summary", clientId],
+    queryFn: () => fetchPendingIdentitySummary({ data: { clientId, limit: 10 } }),
   });
 
   const rows = entries.data?.rows ?? [];
@@ -223,6 +230,52 @@ function ClassificationPage() {
           className="ml-auto w-full sm:w-72"
         />
       </div>
+
+      {pendingIdentitySummary.data && pendingIdentitySummary.data.totalPending > 0 && (
+        <section className="rounded-lg border border-border bg-card p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-display text-sm font-semibold">Pareto das pendências</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {pendingIdentitySummary.data.totalPending} pendência(s) ·{" "}
+                {pendingIdentitySummary.data.totalIdentities} identidade(s) única(s)
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Top 10 identidades</p>
+              <p className="font-display text-2xl font-semibold">
+                {pendingIdentitySummary.data.topCoveragePct}%
+              </p>
+              <p className="text-xs text-muted-foreground">das pendências cobertas</p>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Identidade</th>
+                  <th className="px-4 py-3 text-right">Ocorrências</th>
+                  <th className="px-4 py-3 text-right">Impacto</th>
+                  <th className="px-4 py-3">Exemplo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {pendingIdentitySummary.data.items.map((item) => (
+                  <tr key={item.historyKey}>
+                    <td className="px-4 py-3 font-mono text-xs">{item.historyKey}</td>
+                    <td className="px-4 py-3 text-right">{item.count}</td>
+                    <td className="px-4 py-3 text-right font-mono">{brl(item.totalAmount)}</td>
+                    <td className="max-w-md px-4 py-3 text-muted-foreground">
+                      <p className="truncate">{item.sampleDescription}</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {selected.length > 0 && (
         <section className="rounded-lg border border-primary/40 bg-card p-6">
