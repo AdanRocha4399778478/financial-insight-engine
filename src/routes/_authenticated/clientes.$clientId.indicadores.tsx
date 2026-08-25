@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getDreData } from "@/lib/dre.functions";
+import { getClientDataRange, getDreData } from "@/lib/dre.functions";
 import {
   brl,
   buildDre,
@@ -44,17 +44,77 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/indicad
   component: IndicatorsPage,
 });
 
-function defaultRange() {
+type DateRange = { from: string; to: string };
+
+function defaultRange(): DateRange {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
+function validRange(value: unknown): value is DateRange {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as DateRange;
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate.from) && /^\d{4}-\d{2}-\d{2}$/.test(candidate.to);
+}
+
 function IndicatorsPage() {
   const { clientId } = Route.useParams();
   const fetchDre = useServerFn(getDreData);
-  const [range, setRange] = useState(defaultRange);
+  const fetchDataRange = useServerFn(getClientDataRange);
+  const [range, setRange] = useState<DateRange>(defaultRange);
+  const [readyClientId, setReadyClientId] = useState<string | null>(null);
+
+  const dataRange = useQuery({
+    queryKey: ["dre-data-range", clientId],
+    queryFn: () => fetchDataRange({ data: { clientId } }),
+  });
+
+  useEffect(() => {
+    if (readyClientId === clientId || dataRange.isLoading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const urlRange = { from: params.get("from") ?? "", to: params.get("to") ?? "" };
+    if (validRange(urlRange)) {
+      setRange(urlRange);
+      setReadyClientId(clientId);
+      return;
+    }
+
+    try {
+      // A DRE e os Indicadores compartilham a mesma preferência de período por cliente.
+      const saved = window.localStorage.getItem(`dre-range:${clientId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown;
+        if (validRange(parsed)) {
+          setRange(parsed);
+          setReadyClientId(clientId);
+          return;
+        }
+      }
+    } catch {
+      // Se a persistência local falhar, usamos o período real disponível ou o padrão.
+    }
+
+    setRange(dataRange.data ?? defaultRange());
+    setReadyClientId(clientId);
+  }, [clientId, dataRange.data, dataRange.isLoading, readyClientId]);
+
+  useEffect(() => {
+    if (readyClientId !== clientId) return;
+
+    try {
+      window.localStorage.setItem(`dre-range:${clientId}`, JSON.stringify(range));
+    } catch {
+      // Persistência local é conveniência e não impede o carregamento dos indicadores.
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("from", range.from);
+    url.searchParams.set("to", range.to);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [clientId, range, readyClientId]);
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, "all"],
