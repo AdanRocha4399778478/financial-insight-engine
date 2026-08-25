@@ -196,14 +196,60 @@ export const confirmSuggestions = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const supabase = context.supabase;
+    const { data: before, error: beforeError } = await supabase
+      .from("entries")
+      .select("id, account, nature, behavior, area, status, classification_source, confidence")
+      .eq("client_id", data.clientId)
+      .in("id", data.entryIds)
+      .eq("status", "sugerido")
+      .not("account", "is", null);
+    if (beforeError) throw new Error(beforeError.message);
+    if (!before?.length) return { updated: 0 };
+
+    const eligibleIds = before.map((row) => row.id);
+    const { data: updatedRows, error } = await supabase
       .from("entries")
       .update({ status: "confirmado", confidence: 1 })
       .eq("client_id", data.clientId)
-      .in("id", data.entryIds)
-      .not("account", "is", null);
+      .eq("status", "sugerido")
+      .in("id", eligibleIds)
+      .not("account", "is", null)
+      .select("id");
     if (error) throw new Error(error.message);
-    return { updated: data.entryIds.length };
+
+    const updatedIds = new Set((updatedRows ?? []).map((row) => row.id));
+    for (const row of before) {
+      if (!updatedIds.has(row.id)) continue;
+      await writeAudit(supabase as never, {
+        clientId: data.clientId,
+        entryId: row.id,
+        userId: context.userId,
+        previous: {
+          account: row.account,
+          nature: row.nature,
+          behavior: row.behavior,
+          area: row.area,
+          status: row.status,
+          classification_source: row.classification_source,
+          confidence: row.confidence,
+        },
+        next: {
+          account: row.account,
+          nature: row.nature,
+          behavior: row.behavior,
+          area: row.area,
+          status: "confirmado",
+          classification_source: row.classification_source,
+          confidence: 1,
+        },
+        source: "confirmacao_sugestao",
+        confidence: 1,
+        becameRule: false,
+      });
+    }
+
+    return { updated: updatedIds.size };
   });
 
 export const listRules = createServerFn({ method: "GET" })
