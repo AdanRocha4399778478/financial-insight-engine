@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateImportBalanceIntegrity,
+  inferBalancesFromRunningBalance,
   inferStatementBalances,
 } from "./import-balance-integrity";
 
@@ -83,6 +84,38 @@ describe("statement balance inference", () => {
       inferStatementBalances([
         { description: "SALDO", value: 1000 },
         { description: "SALDO", value: 1250 },
+      ]),
+    ).toMatchObject({ openingBalance: null, closingBalance: null });
+  });
+});
+
+describe("running balance inference", () => {
+  it("infers opening and closing balances from ascending rows", () => {
+    expect(
+      inferBalancesFromRunningBalance([
+        { amount: 100, balance: 1100 },
+        { amount: -50, balance: 1050 },
+        { amount: 200, balance: 1250 },
+      ]),
+    ).toMatchObject({ openingBalance: 1000, closingBalance: 1250 });
+  });
+
+  it("infers opening and closing balances from descending rows", () => {
+    expect(
+      inferBalancesFromRunningBalance([
+        { amount: 200, balance: 1250 },
+        { amount: -50, balance: 1050 },
+        { amount: 100, balance: 1100 },
+      ]),
+    ).toMatchObject({ openingBalance: 1000, closingBalance: 1250 });
+  });
+
+  it("refuses to infer when the running balance is inconsistent", () => {
+    expect(
+      inferBalancesFromRunningBalance([
+        { amount: 100, balance: 1100 },
+        { amount: -50, balance: 900 },
+        { amount: 200, balance: 1400 },
       ]),
     ).toMatchObject({ openingBalance: null, closingBalance: null });
   });
