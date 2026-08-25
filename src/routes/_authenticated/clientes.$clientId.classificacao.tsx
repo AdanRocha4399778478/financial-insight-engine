@@ -152,11 +152,13 @@ function ClassificationPage() {
   const selectionStats = useMemo(() => {
     let resultado = 0;
     let balanco = 0;
+    let totalAmount = 0;
     const groups = new Map<string, number>();
 
     for (const row of selectedRows) {
       if (row.statement_type === "balanco") balanco += 1;
       else resultado += 1;
+      totalAmount += Math.abs(Number(row.amount) || 0);
 
       const secondary =
         row.statement_type === "balanco"
@@ -170,6 +172,7 @@ function ClassificationPage() {
     return {
       resultado,
       balanco,
+      totalAmount,
       top,
       heterogeneous: groups.size > 1,
     };
@@ -196,6 +199,15 @@ function ClassificationPage() {
     setSelected([]);
     setReclassifyMode(false);
     queryClient.invalidateQueries();
+  };
+
+  const focusParetoIdentity = (historyKey: string) => {
+    const subject = historyKey.split("|").slice(1).join("|").trim();
+    setSearch(subject || historyKey);
+    setStatus("pendente");
+    setSelected([]);
+    setReclassifyMode(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const classify = useMutation({
@@ -308,8 +320,8 @@ function ClassificationPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-6 pb-24">
+      <div className="sticky top-0 z-30 -mx-1 flex flex-wrap items-center gap-2 border-b border-border bg-background/95 px-1 py-3 backdrop-blur">
         {statusFilters.map((filter) => (
           <button
             key={filter.key}
@@ -414,7 +426,12 @@ function ClassificationPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {pendingIdentitySummary.data.items.map((item) => (
-                  <tr key={item.historyKey}>
+                  <tr
+                    key={item.historyKey}
+                    onClick={() => focusParetoIdentity(item.historyKey)}
+                    className="cursor-pointer transition-colors hover:bg-muted/40"
+                    title="Filtrar lançamentos desta identidade"
+                  >
                     <td className="px-4 py-3 font-mono text-xs">{item.historyKey}</td>
                     <td className="px-4 py-3 text-right">{item.count}</td>
                     <td className="px-4 py-3 text-right font-mono">{brl(item.totalAmount)}</td>
@@ -426,6 +443,9 @@ function ClassificationPage() {
               </tbody>
             </table>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Clique em uma identidade para filtrar a fila e trabalhar apenas aquele grupo.
+          </p>
         </section>
       )}
 
@@ -477,203 +497,344 @@ function ClassificationPage() {
         </section>
       )}
 
-      {selected.length > 0 && (
-        <section className="rounded-lg border border-primary/40 bg-card p-6">
-          <p className="font-display text-sm font-semibold">
-            {selected.length} lançamento(s) selecionado(s)
-          </p>
-
-          {isAutomaticFilter && (
-            <>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
-                <Badge variant="outline">Balanço: {selectionStats.balanco}</Badge>
-                {selectionStats.top.map(([label, count]) => (
-                  <Badge key={label} variant="secondary">
-                    {count}× {label}
-                  </Badge>
-                ))}
-              </div>
-              {selectionStats.heterogeneous && (
-                <p className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
-                  A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substituirá todos os selecionados pela nova classificação.
-                </p>
-              )}
-            </>
-          )}
-
-          {showClassificationForm && (
-            <>
-              <div className="mt-5 grid gap-4 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <Label>Demonstrativo</Label>
-                  <Select
-                    value={statementType}
-                    onValueChange={(value) => setStatementType(value as StatementType)}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0">
+          <div className="max-h-[72vh] overflow-auto rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-20 bg-muted font-mono text-xs uppercase tracking-wider text-muted-foreground shadow-sm">
+                <tr>
+                  <th className="w-10 px-4 py-3">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={(checked) => setSelected(checked ? rows.map((r) => r.id) : [])}
+                    />
+                  </th>
+                  <th className="px-4 py-3">Data</th>
+                  <th className="px-4 py-3">Descrição</th>
+                  <th className="px-4 py-3">Classificação</th>
+                  <th className="px-4 py-3">Origem</th>
+                  <th className="px-4 py-3 text-right">Valor</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`bg-card transition-colors hover:bg-muted/20 ${
+                      selected.includes(row.id) ? "bg-primary/5" : ""
+                    }`}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATEMENT_TYPES.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          {STATEMENT_TYPE_LABEL[item]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <td className="px-4 py-3">
+                      <Checkbox
+                        checked={selected.includes(row.id)}
+                        onCheckedChange={(checked) =>
+                          setSelected((prev) =>
+                            checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.entry_date}</td>
+                    <td className="max-w-sm px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelected([row.id])}
+                        className="block w-full text-left"
+                        title="Abrir lançamento no painel lateral"
+                      >
+                        <p className="truncate hover:text-primary">{row.description}</p>
+                        {row.counterparty && (
+                          <p className="truncate text-xs text-muted-foreground">{row.counterparty}</p>
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.account ? (
+                        <>
+                          <p>{row.account}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.statement_type === "balanco"
+                              ? `Balanço · ${BALANCE_GROUP_LABEL[row.balance_group as BalanceGroup] ?? "Sem grupo"}`
+                              : `${NATURE_LABEL[row.nature as Nature]} · ${BEHAVIOR_LABEL[row.behavior as Behavior]}`}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {row.classification_source ?? "—"}
+                      <span className="ml-1 font-mono">
+                        {row.confidence ? `(${Math.round(row.confidence * 100)}%)` : ""}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
+                      {brl(Number(row.amount))}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className={statusTone[row.status as EntryStatus]} variant="secondary">
+                        {STATUS_LABEL[row.status as EntryStatus]}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!entries.isLoading && rows.length === 0 && (
+              <p className="bg-card p-10 text-center text-sm text-muted-foreground">
+                Nenhum lançamento neste filtro.
+              </p>
+            )}
+            {entries.isLoading && (
+              <p className="bg-card p-10 text-center text-sm text-muted-foreground">Carregando...</p>
+            )}
+          </div>
+        </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="account">
-                    {statementType === "balanco" ? "Conta patrimonial" : "Conta gerencial"}
-                  </Label>
-                  <Input
-                    id="account"
-                    maxLength={120}
-                    placeholder={
-                      statementType === "balanco"
-                        ? "Empréstimos e Financiamentos..."
-                        : "Combustível, Salários..."
-                    }
-                    value={form.account}
-                    onChange={(e) => setForm({ ...form, account: e.target.value })}
-                  />
-                </div>
+        <aside className="xl:sticky xl:top-20 xl:self-start">
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-display text-sm font-semibold">Workspace de classificação</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A lista continua rolando sem perder os dados e ações da seleção.
+                </p>
+              </div>
+              {selected.length > 0 && <Badge variant="secondary">{selected.length} selecionado(s)</Badge>}
+            </div>
 
-                {statementType === "balanco" ? (
-                  <div className="space-y-2">
-                    <Label>Grupo patrimonial</Label>
-                    <Select
-                      value={balanceGroup}
-                      onValueChange={(value) => setBalanceGroup(value as BalanceGroup)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {BALANCE_GROUPS.map((group) => (
-                          <SelectItem key={group} value={group}>
-                            {BALANCE_GROUP_LABEL[group]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+            {selectedRows.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+                Selecione um lançamento na tabela ou clique na descrição para abrir os detalhes aqui.
+              </div>
+            ) : (
+              <>
+                <div className="mt-5 space-y-3 rounded-lg border border-border bg-background/40 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamento</p>
+                      <p className="mt-1 break-words text-sm font-medium">{selectedRows[0]!.description}</p>
+                    </div>
+                    <p className="whitespace-nowrap font-mono text-sm font-semibold">
+                      {brl(Number(selectedRows[0]!.amount))}
+                    </p>
                   </div>
-                ) : (
+                  {selectedRows[0]!.counterparty && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Contraparte</p>
+                      <p className="mt-1 break-words text-sm">{selectedRows[0]!.counterparty}</p>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline">{selectedRows[0]!.entry_date}</Badge>
+                    {selectedRows[0]!.account && <Badge variant="outline">{selectedRows[0]!.account}</Badge>}
+                    <Badge variant="outline">{STATUS_LABEL[selectedRows[0]!.status as EntryStatus]}</Badge>
+                  </div>
+                  {selectedRows.length > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      + {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}
+                    </p>
+                  )}
+                </div>
+
+                {isAutomaticFilter && (
                   <>
-                    <div className="space-y-2">
-                      <Label>Natureza</Label>
-                      <Select
-                        value={form.nature}
-                        onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {NATURES.map((n) => (
-                            <SelectItem key={n} value={n}>
-                              {NATURE_LABEL[n]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
+                      <Badge variant="outline">Balanço: {selectionStats.balanco}</Badge>
+                      {selectionStats.top.map(([label, count]) => (
+                        <Badge key={label} variant="secondary">
+                          {count}× {label}
+                        </Badge>
+                      ))}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Comportamento</Label>
-                      <Select
-                        value={form.behavior}
-                        onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BEHAVIORS.map((b) => (
-                            <SelectItem key={b} value={b}>
-                              {BEHAVIOR_LABEL[b]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {selectionStats.heterogeneous && (
+                      <p className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
+                        A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substituirá todos os selecionados pela nova classificação.
+                      </p>
+                    )}
                   </>
                 )}
-              </div>
 
-              {statementType === "resultado" && (
-                <>
-                  <div className="mt-4 grid gap-4 lg:grid-cols-4">
-                    <div className="space-y-2 lg:col-start-4">
-                      <Label>Área</Label>
-                      <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
+                {showClassificationForm && (
+                  <div className="mt-5 space-y-4">
+                    <div className="space-y-2">
+                      <Label>Demonstrativo</Label>
+                      <Select
+                        value={statementType}
+                        onValueChange={(value) => setStatementType(value as StatementType)}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={NONE}>Sem área</SelectItem>
-                          {AREAS.map((a) => (
-                            <SelectItem key={a} value={a}>
-                              {a}
+                          {STATEMENT_TYPES.map((item) => (
+                            <SelectItem key={item} value={item}>
+                              {STATEMENT_TYPE_LABEL[item]}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
 
-                  <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-3">
-                      <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
-                      <Label htmlFor="rule">Aprender como regra do cliente</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="account">
+                        {statementType === "balanco" ? "Conta patrimonial" : "Conta gerencial"}
+                      </Label>
+                      <Input
+                        id="account"
+                        maxLength={120}
+                        placeholder={
+                          statementType === "balanco"
+                            ? "Empréstimos e Financiamentos..."
+                            : "Combustível, Salários..."
+                        }
+                        value={form.account}
+                        onChange={(e) => setForm({ ...form, account: e.target.value })}
+                      />
                     </div>
-                    {createRule && (
-                      <>
+
+                    {statementType === "balanco" ? (
+                      <div className="space-y-2">
+                        <Label>Grupo patrimonial</Label>
                         <Select
-                          value={ruleField}
-                          onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
+                          value={balanceGroup}
+                          onValueChange={(value) => setBalanceGroup(value as BalanceGroup)}
                         >
-                          <SelectTrigger className="w-48">
+                          <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="description">Padrão na descrição</SelectItem>
-                            <SelectItem value="counterparty">Fornecedor</SelectItem>
+                            {BALANCE_GROUPS.map((group) => (
+                              <SelectItem key={group} value={group}>
+                                {BALANCE_GROUP_LABEL[group]}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          className="w-64"
-                          maxLength={200}
-                          placeholder="Texto do padrão (opcional)"
-                          value={rulePattern}
-                          onChange={(e) => setRulePattern(e.target.value)}
-                        />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Natureza</Label>
+                          <Select
+                            value={form.nature}
+                            onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {NATURES.map((n) => (
+                                <SelectItem key={n} value={n}>
+                                  {NATURE_LABEL[n]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Comportamento</Label>
+                          <Select
+                            value={form.behavior}
+                            onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {BEHAVIORS.map((b) => (
+                                <SelectItem key={b} value={b}>
+                                  {BEHAVIOR_LABEL[b]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Área</Label>
+                          <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE}>Sem área</SelectItem>
+                              {AREAS.map((a) => (
+                                <SelectItem key={a} value={a}>
+                                  {a}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </>
                     )}
+
+                    {statementType === "resultado" && (
+                      <div className="space-y-3 rounded-lg border border-border p-4">
+                        <div className="flex items-center gap-3">
+                          <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
+                          <Label htmlFor="rule">Aprender como regra do cliente</Label>
+                        </div>
+                        {createRule && (
+                          <>
+                            <Select
+                              value={ruleField}
+                              onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="description">Padrão na descrição</SelectItem>
+                                <SelectItem value="counterparty">Fornecedor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              maxLength={200}
+                              placeholder="Texto do padrão (opcional)"
+                              value={rulePattern}
+                              onChange={(e) => setRulePattern(e.target.value)}
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {statementType === "balanco" && (
+                      <p className="text-xs text-muted-foreground">
+                        Movimentos patrimoniais ficam confirmados, são rastreados no Balanço e não entram na DRE.
+                      </p>
+                    )}
                   </div>
-                </>
-              )}
+                )}
+              </>
+            )}
+          </section>
+        </aside>
+      </div>
 
-              {statementType === "balanco" && (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Movimentos patrimoniais ficam confirmados, são rastreados no Balanço e não entram na DRE.
-                </p>
-              )}
-            </>
-          )}
+      {selected.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 shadow-2xl backdrop-blur">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+            <div className="mr-auto">
+              <p className="text-sm font-medium">
+                {selected.length} selecionado(s) · {brl(selectionStats.totalAmount)} de impacto absoluto
+              </p>
+              <p className="text-xs text-muted-foreground">Ações da seleção permanecem acessíveis durante a rolagem.</p>
+            </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
             {isAutomaticFilter && !reclassifyMode && (
               <>
                 <Button
                   onClick={() => confirmAutomatic.mutate()}
                   disabled={confirmAutomatic.isPending}
                 >
-                  {confirmAutomatic.isPending ? "Confirmando..." : "Confirmar classificações atuais"}
+                  {confirmAutomatic.isPending ? "Confirmando..." : "Confirmar atuais"}
                 </Button>
                 <Button variant="secondary" onClick={() => setReclassifyMode(true)}>
-                  Reclassificar seleção
+                  Reclassificar
                 </Button>
               </>
             )}
@@ -735,94 +896,8 @@ function ClassificationPage() {
               Limpar seleção
             </Button>
           </div>
-
-          {selectedRows.length > 0 && (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Exemplo: {selectedRows[0]!.description}
-            </p>
-          )}
-        </section>
+        </div>
       )}
-
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="w-10 px-4 py-3">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={(checked) => setSelected(checked ? rows.map((r) => r.id) : [])}
-                />
-              </th>
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Descrição</th>
-              <th className="px-4 py-3">Classificação</th>
-              <th className="px-4 py-3">Origem</th>
-              <th className="px-4 py-3 text-right">Valor</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((row) => (
-              <tr key={row.id} className="bg-card">
-                <td className="px-4 py-3">
-                  <Checkbox
-                    checked={selected.includes(row.id)}
-                    onCheckedChange={(checked) =>
-                      setSelected((prev) =>
-                        checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
-                      )
-                    }
-                  />
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.entry_date}</td>
-                <td className="max-w-sm px-4 py-3">
-                  <p className="truncate">{row.description}</p>
-                  {row.counterparty && (
-                    <p className="truncate text-xs text-muted-foreground">{row.counterparty}</p>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {row.account ? (
-                    <>
-                      <p>{row.account}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {row.statement_type === "balanco"
-                          ? `Balanço · ${BALANCE_GROUP_LABEL[row.balance_group as BalanceGroup] ?? "Sem grupo"}`
-                          : `${NATURE_LABEL[row.nature as Nature]} · ${BEHAVIOR_LABEL[row.behavior as Behavior]}`}
-                      </p>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {row.classification_source ?? "—"}
-                  <span className="ml-1 font-mono">
-                    {row.confidence ? `(${Math.round(row.confidence * 100)}%)` : ""}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
-                  {brl(Number(row.amount))}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge className={statusTone[row.status as EntryStatus]} variant="secondary">
-                    {STATUS_LABEL[row.status as EntryStatus]}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!entries.isLoading && rows.length === 0 && (
-          <p className="bg-card p-10 text-center text-sm text-muted-foreground">
-            Nenhum lançamento neste filtro.
-          </p>
-        )}
-        {entries.isLoading && (
-          <p className="bg-card p-10 text-center text-sm text-muted-foreground">Carregando...</p>
-        )}
-      </div>
     </div>
   );
 }
