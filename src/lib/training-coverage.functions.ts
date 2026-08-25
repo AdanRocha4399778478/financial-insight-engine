@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { BEHAVIORS, NATURES } from "./finance";
 import { historyKey } from "./classify";
 import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
+import { findStructuredTrainingMatch } from "./structured-training-match";
 import {
   prepareTrainingBatch,
   type ExistingTrainingExample,
@@ -150,19 +151,32 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
 
     const { data: pendingRows, error: pendingError } = await supabase
       .from("entries")
-      .select("id, description, counterparty")
+      .select("id, description, counterparty, original_category, amount")
       .eq("client_id", data.clientId)
       .eq("status", "pendente")
       .limit(5000);
     if (pendingError) throw new Error(pendingError.message);
 
     let safeMatches = 0;
+    let structuredMatches = 0;
     let conflictMatches = 0;
     let uncovered = 0;
     const matchedKeys = new Set<string>();
+    const structuredMatchedKeys = new Set<string>();
     const conflictMatchedKeys = new Set<string>();
     const uncoveredKeys = new Set<string>();
     const pendingSampleByKey = new Map<string, { description: string; counterparty: string | null }>();
+    const structuredSuggestions = new Map<
+      string,
+      {
+        pendingKey: string;
+        pendingDescription: string;
+        pendingCounterparty: string | null;
+        candidateKey: string;
+        candidateAccount: string;
+        confidence: number;
+      }
+    >();
 
     for (const row of pendingRows ?? []) {
       const key = historyKey({ description: row.description, counterparty: row.counterparty });
@@ -172,14 +186,40 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
       } else if (key && safeKeys.has(key)) {
         safeMatches += 1;
         matchedKeys.add(key);
-      } else {
-        uncovered += 1;
-        if (key) {
+      } else if (key) {
+        const structured = findStructuredTrainingMatch(
+          {
+            description: row.description,
+            counterparty: row.counterparty,
+            original_category: row.original_category,
+            amount: Number(row.amount ?? 0),
+          },
+          merged.history,
+          key,
+        );
+
+        if (structured) {
+          structuredMatches += 1;
+          structuredMatchedKeys.add(key);
+          if (!structuredSuggestions.has(key)) {
+            structuredSuggestions.set(key, {
+              pendingKey: key,
+              pendingDescription: row.description,
+              pendingCounterparty: row.counterparty,
+              candidateKey: structured.history.key,
+              candidateAccount: structured.history.account,
+              confidence: structured.confidence,
+            });
+          }
+        } else {
+          uncovered += 1;
           uncoveredKeys.add(key);
           if (!pendingSampleByKey.has(key)) {
             pendingSampleByKey.set(key, { description: row.description, counterparty: row.counterparty });
           }
         }
+      } else {
+        uncovered += 1;
       }
     }
 
@@ -207,20 +247,31 @@ export const estimateTrainingCoverage = createServerFn({ method: "POST" })
     });
 
     const total = pendingRows?.length ?? 0;
+    const exactCoveragePct = total > 0 ? Number(((safeMatches / total) * 100).toFixed(1)) : 0;
+    const structuredCoveragePct = total > 0 ? Number(((structuredMatches / total) * 100).toFixed(1)) : 0;
+    const combinedCoveragePct = total > 0 ? Number((((safeMatches + structuredMatches) / total) * 100).toFixed(1)) : 0;
+
     return {
       totalPending: total,
       safeMatches,
+      structuredMatches,
       conflictMatches,
       uncovered,
-      estimatedCoveragePct: total > 0 ? Number(((safeMatches / total) * 100).toFixed(1)) : 0,
+      estimatedCoveragePct: exactCoveragePct,
+      exactCoveragePct,
+      structuredCoveragePct,
+      combinedCoveragePct,
       safeHistoryKeys: matchedKeys.size,
+      structuredHistoryKeys: structuredMatchedKeys.size,
       conflictHistoryKeys: conflictMatchedKeys.size,
       uncoveredHistoryKeys: uncoveredKeys.size,
       samples: {
         matched: [...matchedKeys].slice(0, 8),
+        structured: [...structuredMatchedKeys].slice(0, 8),
         conflicts: [...conflictMatchedKeys].slice(0, 8),
         uncovered: [...uncoveredKeys].slice(0, 8),
       },
+      structuredSuggestions: [...structuredSuggestions.values()].slice(0, 12),
       mismatchDiagnostics,
       trainingSamples,
     };
