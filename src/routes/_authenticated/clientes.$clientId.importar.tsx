@@ -189,6 +189,21 @@ function ImportPage() {
           ? "Detectado no extrato"
           : "Não identificado";
 
+  const openingSource = manualOpeningValue !== null
+    ? "manual" as const
+    : inferredBalances?.openingBalance !== null
+      ? openingFromRunningBalance ? "inferido" as const : "extrato" as const
+      : balanceIntegrity?.openingBalance !== null
+        ? "inferido" as const
+        : null;
+  const closingSource = manualClosingValue !== null
+    ? "manual" as const
+    : inferredBalances?.closingBalance !== null
+      ? closingFromRunningBalance ? "inferido" as const : "extrato" as const
+      : balanceIntegrity?.closingBalance !== null
+        ? "inferido" as const
+        : null;
+
   const dreResult = useMemo(
     () => (parsed && mode === "dre" && structure ? buildDreFacts(parsed.rows, structure) : null),
     [parsed, mode, structure],
@@ -206,6 +221,19 @@ function ImportPage() {
           mapping: mapping as Record<string, string>,
           allowDuplicates,
           rows: normalized.valid,
+          integrityEvidence: balanceIntegrity
+            ? {
+                openingBalance: balanceIntegrity.openingBalance,
+                closingBalance: balanceIntegrity.closingBalance,
+                openingSource,
+                closingSource,
+                openingIndependent,
+                closingIndependent,
+                creditTotal: normalized.summary.creditTotal,
+                debitTotal: normalized.summary.debitTotal,
+                tolerance: balanceIntegrity.tolerance,
+              }
+            : null,
         },
       });
     },
@@ -371,11 +399,10 @@ function ImportPage() {
         <section className="rounded-lg border border-border bg-card p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-lg font-semibold">3. Mapeamento de colunas</h2>
-            {reused && <Badge>Mapeamento reaproveitado deste layout</Badge>}
+            {reused && <Badge variant="secondary">Mapeamento reaproveitado deste layout</Badge>}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Sugerimos automaticamente pelo nome das colunas. Ajuste o que for necessário — a escolha
-            fica salva para os próximos arquivos com o mesmo layout.
+            Associe as colunas do arquivo aos campos do sistema. Data, descrição e valor são obrigatórios.
           </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {STANDARD_FIELDS.map((field) => (
@@ -387,22 +414,20 @@ function ImportPage() {
                 <Select
                   value={mapping[field.key] ?? NONE}
                   onValueChange={(value) =>
-                    setMapping((prev) => {
-                      const next = { ...prev };
-                      if (value === NONE) delete next[field.key];
-                      else next[field.key] = value;
-                      return next;
-                    })
+                    setMapping((previous) => ({
+                      ...previous,
+                      [field.key]: value === NONE ? undefined : value,
+                    }))
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Não usar" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>Não usar</SelectItem>
-                    {parsed.columns.map((col) => (
-                      <SelectItem key={col} value={col}>
-                        {col}
+                    {parsed.columns.map((column) => (
+                      <SelectItem key={column} value={column}>
+                        {column}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -410,386 +435,220 @@ function ImportPage() {
               </div>
             ))}
           </div>
-          {!hasRequired && (
-            <p className="mt-6 text-sm text-destructive">
-              Informe ao menos Data, Descrição e Valor (ou colunas de Crédito/Débito).
-            </p>
-          )}
-        </section>
-      )}
 
-      {parsed && mode === "movimentos" && normalized && hasRequired && (
-        <section className="rounded-lg border border-border bg-card p-8">
-          <h2 className="font-display text-lg font-semibold">4. Pré-visualização e confirmação</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Somente linhas com movimento financeiro (crédito, débito ou valor) viram lançamentos.
-            Saldos, cabeçalhos repetidos e linhas sem movimento são descartados.
-          </p>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              { label: "Linhas lidas", value: String(normalized.summary.read) },
-              { label: "Lançamentos válidos", value: String(normalized.summary.valid) },
-              { label: "Linhas descartadas", value: String(normalized.summary.discarded) },
-              {
-                label: `Créditos (${normalized.summary.creditCount})`,
-                value: brl(normalized.summary.creditTotal),
-              },
-              {
-                label: `Débitos (${normalized.summary.debitCount})`,
-                value: brl(normalized.summary.debitTotal),
-              },
-              { label: "Movimento líquido", value: brl(normalized.summary.net) },
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-border p-4">
-                <p className="font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
-                  {item.label}
-                </p>
-                <p className="mt-2 font-display text-sm font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-3 text-xs text-muted-foreground">
-            Descartes: {normalized.summary.discardedNoMovement} sem movimento ·{" "}
-            {normalized.summary.discardedBalance} linhas de saldo ·{" "}
-            {normalized.summary.discardedRepeatedHeader} cabeçalhos repetidos ·{" "}
-            {normalized.summary.discardedInvalid} sem data válida
-          </p>
-
-          {balanceIntegrity && inferredBalances && (
-            <div className="mt-6 rounded-lg border border-border bg-muted/20 p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-display text-base font-semibold">Integridade da importação</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Confira os saldos antes de considerar a base validada. Valores informados manualmente têm prioridade sobre o extrato e sobre inferências matemáticas.
-                  </p>
-                </div>
-                <Badge
-                  variant={
-                    balanceIntegrity.status === "conciliado"
-                      ? "default"
-                      : balanceIntegrity.status === "divergente"
-                        ? "destructive"
-                        : "outline"
-                  }
-                >
-                  {balanceIntegrity.status === "conciliado"
-                    ? "CONCILIADO"
-                    : balanceIntegrity.status === "divergente"
-                      ? "DIVERGENTE"
-                      : balanceIntegrity.status === "fechamento_inferido"
-                        ? "FECHAMENTO INFERIDO"
-                        : "NÃO VERIFICADO"}
-                </Badge>
-              </div>
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="manual-opening-balance">Saldo inicial informado (opcional)</Label>
-                  <Input
-                    id="manual-opening-balance"
-                    inputMode="decimal"
-                    placeholder="Ex.: 1.250,30"
-                    value={manualOpeningBalance}
-                    onChange={(event) => setManualOpeningBalance(event.target.value)}
-                  />
-                  <p className="text-[0.7rem] text-muted-foreground">
-                    Use quando você tiver um saldo de abertura independente do arquivo importado.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manual-closing-balance">Saldo final informado (opcional)</Label>
-                  <Input
-                    id="manual-closing-balance"
-                    inputMode="decimal"
-                    placeholder="Ex.: 1.589,73"
-                    value={manualClosingBalance}
-                    onChange={(event) => setManualClosingBalance(event.target.value)}
-                  />
-                  <p className="text-[0.7rem] text-muted-foreground">
-                    Use quando você tiver um saldo de fechamento independente do arquivo importado.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                {[
-                  {
-                    label: "Saldo inicial",
-                    value: balanceIntegrity.openingBalance === null ? "—" : brl(balanceIntegrity.openingBalance),
-                    source: openingSourceLabel,
-                  },
-                  { label: "Entradas", value: brl(normalized.summary.creditTotal), source: "Movimentos normalizados" },
-                  { label: "Saídas", value: brl(normalized.summary.debitTotal), source: "Movimentos normalizados" },
-                  {
-                    label: "Saldo calculado",
-                    value: balanceIntegrity.calculatedBalance === null ? "—" : brl(balanceIntegrity.calculatedBalance),
-                    source: "Cálculo da importação",
-                  },
-                  {
-                    label: "Saldo final",
-                    value: balanceIntegrity.closingBalance === null ? "—" : brl(balanceIntegrity.closingBalance),
-                    source: closingSourceLabel,
-                  },
-                  {
-                    label: "Diferença",
-                    value: balanceIntegrity.difference === null ? "—" : brl(balanceIntegrity.difference),
-                    source: balanceIntegrity.status === "fechamento_inferido" ? "Não aplicável à conciliação" : "Banco menos calculado",
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-lg border border-border bg-card p-4">
-                    <p className="font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 font-display text-sm font-semibold">{item.value}</p>
-                    <p className="mt-2 text-[0.65rem] leading-relaxed text-muted-foreground">{item.source}</p>
-                  </div>
-                ))}
-              </div>
-
-              {balanceIntegrity.status === "conciliado" && (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Os saldos inicial e final são independentes e a movimentação fecha dentro da tolerância de {brl(balanceIntegrity.tolerance)}.
-                </p>
-              )}
-
-              {balanceIntegrity.status === "fechamento_inferido" && (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  A equação fecha porque pelo menos um dos saldos foi reconstruído matematicamente. Isso é uma conferência útil, mas não equivale a uma conciliação bancária independente.
-                </p>
-              )}
-
-              {balanceIntegrity.status === "nao_verificado" && (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Não há evidência suficiente para determinar os dois saldos com segurança. Informe os saldos manualmente ou utilize um extrato com saldos identificáveis para realizar a conferência.
-                </p>
-              )}
-
-              {balanceIntegrity.status === "divergente" && (
-                <p className="mt-4 text-xs text-destructive">
-                  A diferença supera a tolerância de {brl(balanceIntegrity.tolerance)}. Revise período incompleto,
-                  lançamento descartado, duplicidade ou direção de crédito/débito antes de considerar a base validada.
-                </p>
-              )}
-
-              {(inferredBalances.openingSource || inferredBalances.closingSource) && (
-                <p className="mt-3 text-[0.7rem] text-muted-foreground">
-                  Evidência encontrada no arquivo: inicial {inferredBalances.openingSource ?? "não identificada"} · final{" "}
-                  {inferredBalances.closingSource ?? "não identificada"}.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="mt-6 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Data</th>
-                  <th className="px-4 py-3">Descrição</th>
-                  <th className="px-4 py-3">Fornecedor</th>
-                  <th className="px-4 py-3 text-right">Valor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {normalized.valid.slice(0, 8).map((row, index) => (
-                  <tr key={index}>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.entry_date}</td>
-                    <td className="max-w-xs truncate px-4 py-3">{row.description}</td>
-                    <td className="max-w-[12rem] truncate px-4 py-3 text-muted-foreground">
-                      {row.counterparty ?? "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
-                      {brl(row.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="period">Rótulo do período (opcional)</Label>
+              <Label>Competência/período (opcional)</Label>
               <Input
-                id="period"
-                maxLength={60}
-                placeholder="Jan/2025 — Extrato Banco X"
+                placeholder="Ex.: Jan/2026"
                 value={periodLabel}
                 onChange={(e) => setPeriodLabel(e.target.value)}
               />
             </div>
-            <div className="flex items-start gap-3 rounded-lg border border-border p-4">
-              <Switch checked={allowDuplicates} onCheckedChange={setAllowDuplicates} id="dup" />
-              <div>
-                <Label htmlFor="dup">Importar mesmo com duplicidade</Label>
+            <div className="flex items-end gap-3 rounded-lg border border-border px-4 py-3">
+              <div className="flex-1">
+                <Label>Permitir duplicidades</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Por padrão, lançamentos idênticos já existentes são bloqueados.
+                  Desative para ignorar lançamentos que já existem para este cliente.
                 </p>
               </div>
+              <Switch checked={allowDuplicates} onCheckedChange={setAllowDuplicates} />
             </div>
           </div>
-
-          <Button
-            className="mt-8"
-            size="lg"
-            disabled={send.isPending || normalized.valid.length === 0}
-            onClick={() => send.mutate()}
-          >
-            {send.isPending ? "Processando..." : "Importar e classificar"}
-          </Button>
-        </section>
-      )}
-
-      {parsed && mode === "dre" && structure && (
-        <section className="rounded-lg border border-border bg-card p-8">
-          <h2 className="font-display text-lg font-semibold">3. Estrutura da DRE</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Detectamos a conta, o nome e as colunas de período. Colunas derivadas (%, Total Geral,
-            Média) são ignoradas como fonte primária.
-          </p>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {(
-              [
-                { key: "codeColumn" as const, label: "Código da conta" },
-                { key: "nameColumn" as const, label: "Nome da conta" },
-              ]
-            ).map((field) => (
-              <div key={field.key} className="space-y-2">
-                <Label>{field.label}</Label>
-                <Select
-                  value={structure[field.key] ?? NONE}
-                  onValueChange={(value) =>
-                    setStructure((prev) =>
-                      prev ? { ...prev, [field.key]: value === NONE ? null : value } : prev,
-                    )
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Não usar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Não usar</SelectItem>
-                    {parsed.columns.map((col) => (
-                      <SelectItem key={col} value={col}>
-                        {col}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            {structure.periods.map((p) => (
-              <Badge key={p.column}>
-                {p.label} → {p.period.slice(0, 7)}
-              </Badge>
-            ))}
-            {structure.periods.length === 0 && (
-              <p className="text-sm text-destructive">
-                Nenhuma coluna de período reconhecida (ex.: Mai/2026). Verifique a linha de cabeçalho.
-              </p>
-            )}
-          </div>
-          {structure.ignored.length > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Colunas ignoradas: {structure.ignored.join(" · ")}
-            </p>
-          )}
-        </section>
-      )}
-
-      {parsed && mode === "dre" && dreResult && structure && structure.periods.length > 0 && (
-        <section className="rounded-lg border border-border bg-card p-8">
-          <h2 className="font-display text-lg font-semibold">4. Validação e confirmação</h2>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            {[
-              { label: "Linhas lidas", value: String(parsed.rows.length) },
-              { label: "Contas com valor", value: String(dreResult.accounts.length) },
-              { label: "Valores por período", value: String(dreResult.facts.length) },
-              { label: "Duplicatas idênticas removidas", value: String(dreResult.duplicatesRemoved) },
-              { label: "Conflitos de valor", value: String(dreResult.conflicts.length) },
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-border p-4">
-                <p className="font-mono text-[0.65rem] uppercase tracking-widest text-muted-foreground">
-                  {item.label}
-                </p>
-                <p className="mt-2 font-display text-sm font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {dreResult.conflicts.length > 0 && (
-            <div className="mt-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <p className="font-display text-sm font-semibold">
-                Importação bloqueada: mesma conta e período com valores diferentes
-              </p>
-              <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
-                {dreResult.conflicts.slice(0, 20).map((c) => (
-                  <li key={`${c.account_code}-${c.period}`} className="font-mono">
-                    {c.account_code} · {c.account_name} · {c.period_label}:{" "}
-                    {c.values
-                      .map((v) => (v.source_row ? `linha ${v.source_row} = ${brl(v.amount)}` : brl(v.amount)))
-                      .join("  vs  ")}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           <div className="mt-6 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/50 font-mono uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Conta</th>
-                  <th className="px-4 py-3">Nome</th>
-                  <th className="px-4 py-3">Período</th>
-                  <th className="px-4 py-3 text-right">Valor</th>
+                  <th className="px-3 py-2">Data</th>
+                  <th className="px-3 py-2">Descrição</th>
+                  <th className="px-3 py-2">Valor</th>
+                  <th className="px-3 py-2">Documento</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {dreResult.facts.slice(0, 8).map((fact, index) => (
-                  <tr key={index}>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{fact.account_code}</td>
-                    <td className="max-w-xs truncate px-4 py-3">{fact.account_name}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                      {fact.period_label}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-mono">
-                      {brl(fact.amount)}
-                    </td>
+                {(normalized?.valid ?? []).slice(0, 5).map((row, index) => (
+                  <tr key={`${row.entry_date}-${index}`}>
+                    <td className="px-3 py-2">{row.entry_date}</td>
+                    <td className="max-w-[20rem] truncate px-3 py-2">{row.description}</td>
+                    <td className="px-3 py-2">{brl(row.amount)}</td>
+                    <td className="px-3 py-2">{row.document ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="mt-6 max-w-sm space-y-2">
-            <Label htmlFor="dre-period">Rótulo do arquivo (opcional)</Label>
-            <Input
-              id="dre-period"
-              maxLength={60}
-              placeholder="DRE Mai—Jun/2026"
-              value={periodLabel}
-              onChange={(e) => setPeriodLabel(e.target.value)}
-            />
+          {normalized && (
+            <div className="mt-6 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Linhas lidas</p>
+                  <p className="mt-1 text-xl font-semibold">{normalized.summary.totalRows}</p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamentos válidos</p>
+                  <p className="mt-1 text-xl font-semibold">{normalized.summary.validRows}</p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Entradas</p>
+                  <p className="mt-1 text-xl font-semibold">{brl(normalized.summary.creditTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Saídas</p>
+                  <p className="mt-1 text-xl font-semibold">{brl(normalized.summary.debitTotal)}</p>
+                </div>
+              </div>
+
+              {balanceIntegrity && (
+                <div className="rounded-lg border border-border p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium">Integridade da importação</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Conferência matemática entre saldo inicial, movimentações e saldo final.
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        balanceIntegrity.status === "conciliado"
+                          ? "default"
+                          : balanceIntegrity.status === "divergente"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {balanceIntegrity.status === "conciliado"
+                        ? "CONCILIADO"
+                        : balanceIntegrity.status === "divergente"
+                          ? "DIVERGENTE"
+                          : balanceIntegrity.status === "fechamento_inferido"
+                            ? "FECHAMENTO INFERIDO"
+                            : "NÃO VERIFICADO"}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Saldo inicial informado (opcional)</Label>
+                      <Input
+                        placeholder="Ex.: 1.234,56"
+                        value={manualOpeningBalance}
+                        onChange={(e) => setManualOpeningBalance(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Saldo final informado (opcional)</Label>
+                      <Input
+                        placeholder="Ex.: 2.345,67"
+                        value={manualClosingBalance}
+                        onChange={(e) => setManualClosingBalance(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Saldo inicial</p>
+                      <p className="mt-1 font-medium">{balanceIntegrity.openingBalance === null ? "—" : brl(balanceIntegrity.openingBalance)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{openingSourceLabel}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Entradas</p>
+                      <p className="mt-1 font-medium">{brl(normalized.summary.creditTotal)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Movimentos normalizados</p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Saídas</p>
+                      <p className="mt-1 font-medium">{brl(normalized.summary.debitTotal)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Movimentos normalizados</p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Saldo calculado</p>
+                      <p className="mt-1 font-medium">{balanceIntegrity.calculatedBalance === null ? "—" : brl(balanceIntegrity.calculatedBalance)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Cálculo da importação</p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Saldo final</p>
+                      <p className="mt-1 font-medium">{balanceIntegrity.closingBalance === null ? "—" : brl(balanceIntegrity.closingBalance)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{closingSourceLabel}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="text-xs text-muted-foreground">Diferença</p>
+                      <p className="mt-1 font-medium">{balanceIntegrity.difference === null ? "—" : brl(balanceIntegrity.difference)}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Banco menos calculado</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    {balanceIntegrity.status === "conciliado"
+                      ? "Os saldos independentes fecham com as movimentações dentro da tolerância de R$ 0,01."
+                      : balanceIntegrity.status === "divergente"
+                        ? "Os saldos independentes não fecham com as movimentações. Revise mapeamento, período, sinais e linhas descartadas."
+                        : balanceIntegrity.status === "fechamento_inferido"
+                          ? "O fechamento matemático foi obtido, mas pelo menos um dos saldos foi inferido. Isso não substitui uma conciliação bancária com duas evidências independentes."
+                          : "Não há evidência suficiente para determinar os dois saldos com segurança. Informe os saldos manualmente ou utilize um extrato com saldos identificáveis para realizar a conferência."}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  disabled={!hasRequired || send.isPending || normalized.valid.length === 0}
+                  onClick={() => send.mutate()}
+                >
+                  {send.isPending ? "Importando..." : "Importar e classificar"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {parsed && mode === "dre" && (
+        <section className="rounded-lg border border-border bg-card p-8">
+          <h2 className="font-display text-lg font-semibold">3. Estrutura da DRE</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Confirme a estrutura detectada antes de importar os fatos consolidados.
+          </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Coluna da conta</Label>
+              <Input value={structure?.nameColumn ?? ""} readOnly />
+            </div>
+            <div className="space-y-2">
+              <Label>Código da conta</Label>
+              <Input value={structure?.codeColumn ?? ""} readOnly />
+            </div>
+            <div className="space-y-2">
+              <Label>Períodos detectados</Label>
+              <Input value={structure?.periods.length ?? 0} readOnly />
+            </div>
           </div>
 
-          <Button
-            className="mt-8"
-            size="lg"
-            disabled={
-              sendDre.isPending || dreResult.facts.length === 0 || dreResult.conflicts.length > 0
-            }
-            onClick={() => sendDre.mutate()}
-          >
-            {sendDre.isPending ? "Processando..." : "Importar DRE pronta"}
-          </Button>
+          {dreResult && (
+            <div className="mt-6 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Contas</p>
+                  <p className="mt-1 text-xl font-semibold">{dreResult.accounts}</p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Períodos</p>
+                  <p className="mt-1 text-xl font-semibold">{dreResult.periods}</p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Valores</p>
+                  <p className="mt-1 text-xl font-semibold">{dreResult.facts.length}</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button disabled={sendDre.isPending || dreResult.facts.length === 0} onClick={() => sendDre.mutate()}>
+                  {sendDre.isPending ? "Importando..." : "Importar DRE"}
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
       )}
     </div>
