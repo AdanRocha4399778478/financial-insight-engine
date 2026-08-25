@@ -26,6 +26,12 @@ type CoverageResult = Awaited<ReturnType<ReturnType<typeof useServerFn<typeof es
 type RejectedRow = { sourceRowNumber: number; reason: string };
 type TrainingFormat = "bandrones" | "erinho";
 
+const mismatchLabel = {
+  direction_mismatch: "direção diferente",
+  partial_identity: "identidade parcial",
+  no_candidate: "sem candidato",
+} as const;
+
 function detectTrainingFormat(sourceRows: Record<string, unknown>[]): TrainingFormat {
   const first = sourceRows[0] ?? {};
   const keys = new Set(Object.keys(first));
@@ -201,6 +207,37 @@ function TrainingPage() {
                 <Metric label="Matches conflitantes" value={coverage.conflictMatches} />
                 <Metric label="Sem cobertura" value={coverage.uncovered} />
               </div>
+
+              {coverage.mismatchDiagnostics.length > 0 && (
+                <div className="mt-5 overflow-x-auto rounded-lg border border-border bg-card">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3">Pendência atual</th>
+                        <th className="px-4 py-3">Relação</th>
+                        <th className="px-4 py-3">Chave no treinamento</th>
+                        <th className="px-4 py-3">Conta</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {coverage.mismatchDiagnostics.map((item) => (
+                        <tr key={item.pendingKey}>
+                          <td className="max-w-xs px-4 py-3 font-mono text-xs">
+                            <p className="truncate">{item.pendingKey}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="secondary">{mismatchLabel[item.relation]}</Badge>
+                          </td>
+                          <td className="max-w-xs px-4 py-3 font-mono text-xs text-muted-foreground">
+                            <p className="truncate">{item.candidateKey ?? "—"}</p>
+                          </td>
+                          <td className="px-4 py-3">{item.candidateAccount ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
