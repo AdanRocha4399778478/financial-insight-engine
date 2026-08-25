@@ -1,6 +1,10 @@
 import { normalize } from "./classify";
 
-export type ImportBalanceIntegrityStatus = "conciliado" | "divergente" | "nao_verificado";
+export type ImportBalanceIntegrityStatus =
+  | "conciliado"
+  | "divergente"
+  | "fechamento_inferido"
+  | "nao_verificado";
 
 export interface ImportBalanceIntegrityInput {
   openingBalance: number | null;
@@ -8,6 +12,8 @@ export interface ImportBalanceIntegrityInput {
   creditTotal: number;
   debitTotal: number;
   tolerance?: number;
+  openingIndependent?: boolean;
+  closingIndependent?: boolean;
 }
 
 export interface ImportBalanceIntegrityResult {
@@ -16,6 +22,8 @@ export interface ImportBalanceIntegrityResult {
   difference: number | null;
   absoluteDifference: number | null;
   tolerance: number;
+  openingBalance: number | null;
+  closingBalance: number | null;
 }
 
 export interface BalanceRowLike {
@@ -132,7 +140,7 @@ export function inferBalancesFromRunningBalance(
     return {
       openingBalance: forwardOpening,
       closingBalance: forwardClosing,
-      openingSource: "coluna de saldo acumulado (fechamento do período, ordem crescente)",
+      openingSource: "coluna de saldo acumulado (fechamento inferido, ordem crescente)",
       closingSource: "coluna de saldo acumulado (última linha)",
     };
   }
@@ -141,7 +149,7 @@ export function inferBalancesFromRunningBalance(
     return {
       openingBalance: reverseOpening,
       closingBalance: reverseClosing,
-      openingSource: "coluna de saldo acumulado (fechamento do período, ordem decrescente)",
+      openingSource: "coluna de saldo acumulado (fechamento inferido, ordem decrescente)",
       closingSource: "coluna de saldo acumulado (primeira linha)",
     };
   }
@@ -154,7 +162,7 @@ export function inferBalancesFromRunningBalance(
       return {
         openingBalance: forwardOpening,
         closingBalance: forwardClosing,
-        openingSource: "coluna de saldo acumulado (fechamento do período, ordem crescente)",
+        openingSource: "coluna de saldo acumulado (fechamento inferido, ordem crescente)",
         closingSource: "coluna de saldo acumulado (última linha)",
       };
     }
@@ -163,7 +171,7 @@ export function inferBalancesFromRunningBalance(
       return {
         openingBalance: reverseOpening,
         closingBalance: reverseClosing,
-        openingSource: "coluna de saldo acumulado (fechamento do período, ordem decrescente)",
+        openingSource: "coluna de saldo acumulado (fechamento inferido, ordem decrescente)",
         closingSource: "coluna de saldo acumulado (primeira linha)",
       };
     }
@@ -181,22 +189,46 @@ export function calculateImportBalanceIntegrity(
   input: ImportBalanceIntegrityInput,
 ): ImportBalanceIntegrityResult {
   const tolerance = Math.max(0, roundCurrency(input.tolerance ?? 0.01));
+  const net = roundCurrency(input.creditTotal - input.debitTotal);
+  const openingIndependent = input.openingIndependent ?? true;
+  const closingIndependent = input.closingIndependent ?? true;
 
-  if (!isFiniteNumber(input.openingBalance) || !isFiniteNumber(input.closingBalance)) {
+  let openingBalance = input.openingBalance;
+  let closingBalance = input.closingBalance;
+
+  if (!isFiniteNumber(openingBalance) && isFiniteNumber(closingBalance)) {
+    openingBalance = roundCurrency(closingBalance - net);
+  } else if (isFiniteNumber(openingBalance) && !isFiniteNumber(closingBalance)) {
+    closingBalance = roundCurrency(openingBalance + net);
+  }
+
+  if (!isFiniteNumber(openingBalance) || !isFiniteNumber(closingBalance)) {
     return {
       status: "nao_verificado",
       calculatedBalance: null,
       difference: null,
       absoluteDifference: null,
       tolerance,
+      openingBalance: null,
+      closingBalance: null,
     };
   }
 
-  const calculatedBalance = roundCurrency(
-    input.openingBalance + input.creditTotal - input.debitTotal,
-  );
-  const difference = roundCurrency(input.closingBalance - calculatedBalance);
+  const calculatedBalance = roundCurrency(openingBalance + input.creditTotal - input.debitTotal);
+  const difference = roundCurrency(closingBalance - calculatedBalance);
   const absoluteDifference = Math.abs(difference);
+
+  if (!openingIndependent || !closingIndependent) {
+    return {
+      status: "fechamento_inferido",
+      calculatedBalance,
+      difference: null,
+      absoluteDifference: null,
+      tolerance,
+      openingBalance,
+      closingBalance,
+    };
+  }
 
   return {
     status: absoluteDifference <= tolerance ? "conciliado" : "divergente",
@@ -204,5 +236,7 @@ export function calculateImportBalanceIntegrity(
     difference,
     absoluteDifference,
     tolerance,
+    openingBalance,
+    closingBalance,
   };
 }
