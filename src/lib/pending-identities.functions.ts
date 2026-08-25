@@ -22,6 +22,7 @@ export const listPendingIdentitySummary = createServerFn({ method: "GET" })
       count: number;
       totalAmount: number;
       sampleDescription: string;
+      entryIds: string[];
     }>();
 
     for (const row of rows ?? []) {
@@ -32,9 +33,11 @@ export const listPendingIdentitySummary = createServerFn({ method: "GET" })
         count: 0,
         totalAmount: 0,
         sampleDescription: row.description,
+        entryIds: [],
       };
       current.count += 1;
       current.totalAmount += Math.abs(Number(row.amount) || 0);
+      current.entryIds.push(row.id);
       grouped.set(key, current);
     }
 
