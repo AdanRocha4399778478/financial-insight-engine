@@ -16,11 +16,13 @@ import { Route as AuthenticatedClientesIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedClientesClientIdRouteImport } from './routes/_authenticated/clientes.$clientId'
 import { Route as AuthenticatedClientesClientIdIndexRouteImport } from './routes/_authenticated/clientes.$clientId.index'
 import { Route as AuthenticatedClientesClientIdClassificacaoRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao'
+import { Route as AuthenticatedClientesClientIdClassificacaoPatrimonialRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao-patrimonial'
 import { Route as AuthenticatedClientesClientIdContasRouteImport } from './routes/_authenticated/clientes.$clientId.contas'
 import { Route as AuthenticatedClientesClientIdDreRouteImport } from './routes/_authenticated/clientes.$clientId.dre'
 import { Route as AuthenticatedClientesClientIdGovernancaRouteImport } from './routes/_authenticated/clientes.$clientId.governanca'
 import { Route as AuthenticatedClientesClientIdImportarRouteImport } from './routes/_authenticated/clientes.$clientId.importar'
 import { Route as AuthenticatedClientesClientIdIndicadoresRouteImport } from './routes/_authenticated/clientes.$clientId.indicadores'
+import { Route as AuthenticatedClientesClientIdTreinamentoRouteImport } from './routes/_authenticated/clientes.$clientId.treinamento'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,6 +62,12 @@ const AuthenticatedClientesClientIdClassificacaoRoute =
     path: '/classificacao',
     getParentRoute: () => AuthenticatedClientesClientIdRoute,
   } as any)
+const AuthenticatedClientesClientIdClassificacaoPatrimonialRoute =
+  AuthenticatedClientesClientIdClassificacaoPatrimonialRouteImport.update({
+    id: '/classificacao-patrimonial',
+    path: '/classificacao-patrimonial',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
 const AuthenticatedClientesClientIdContasRoute =
   AuthenticatedClientesClientIdContasRouteImport.update({
     id: '/contas',
@@ -90,6 +98,12 @@ const AuthenticatedClientesClientIdIndicadoresRoute =
     path: '/indicadores',
     getParentRoute: () => AuthenticatedClientesClientIdRoute,
   } as any)
+const AuthenticatedClientesClientIdTreinamentoRoute =
+  AuthenticatedClientesClientIdTreinamentoRouteImport.update({
+    id: '/treinamento',
+    path: '/treinamento',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -97,11 +111,13 @@ export interface FileRoutesByFullPath {
   '/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
   '/clientes/': typeof AuthenticatedClientesIndexRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/clientes/$clientId/treinamento': typeof AuthenticatedClientesClientIdTreinamentoRoute
   '/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -109,11 +125,13 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/clientes': typeof AuthenticatedClientesIndexRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
   '/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/clientes/$clientId/treinamento': typeof AuthenticatedClientesClientIdTreinamentoRoute
   '/clientes/$clientId': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRoutesById {
@@ -124,11 +142,13 @@ export interface FileRoutesById {
   '/_authenticated/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
   '/_authenticated/clientes/': typeof AuthenticatedClientesIndexRoute
   '/_authenticated/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
+  '/_authenticated/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/_authenticated/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
   '/_authenticated/clientes/$clientId/dre': typeof AuthenticatedClientesClientIdDreRoute
   '/_authenticated/clientes/$clientId/governanca': typeof AuthenticatedClientesClientIdGovernancaRoute
   '/_authenticated/clientes/$clientId/importar': typeof AuthenticatedClientesClientIdImportarRoute
   '/_authenticated/clientes/$clientId/indicadores': typeof AuthenticatedClientesClientIdIndicadoresRoute
+  '/_authenticated/clientes/$clientId/treinamento': typeof AuthenticatedClientesClientIdTreinamentoRoute
   '/_authenticated/clientes/$clientId/': typeof AuthenticatedClientesClientIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -139,11 +159,13 @@ export interface FileRouteTypes {
     | '/clientes/$clientId'
     | '/clientes/'
     | '/clientes/$clientId/classificacao'
+    | '/clientes/$clientId/classificacao-patrimonial'
     | '/clientes/$clientId/contas'
     | '/clientes/$clientId/dre'
     | '/clientes/$clientId/governanca'
     | '/clientes/$clientId/importar'
     | '/clientes/$clientId/indicadores'
+    | '/clientes/$clientId/treinamento'
     | '/clientes/$clientId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -151,11 +173,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clientes'
     | '/clientes/$clientId/classificacao'
+    | '/clientes/$clientId/classificacao-patrimonial'
     | '/clientes/$clientId/contas'
     | '/clientes/$clientId/dre'
     | '/clientes/$clientId/governanca'
     | '/clientes/$clientId/importar'
     | '/clientes/$clientId/indicadores'
+    | '/clientes/$clientId/treinamento'
     | '/clientes/$clientId'
   id:
     | '__root__'
@@ -165,11 +189,13 @@ export interface FileRouteTypes {
     | '/_authenticated/clientes/$clientId'
     | '/_authenticated/clientes/'
     | '/_authenticated/clientes/$clientId/classificacao'
+    | '/_authenticated/clientes/$clientId/classificacao-patrimonial'
     | '/_authenticated/clientes/$clientId/contas'
     | '/_authenticated/clientes/$clientId/dre'
     | '/_authenticated/clientes/$clientId/governanca'
     | '/_authenticated/clientes/$clientId/importar'
     | '/_authenticated/clientes/$clientId/indicadores'
+    | '/_authenticated/clientes/$clientId/treinamento'
     | '/_authenticated/clientes/$clientId/'
   fileRoutesById: FileRoutesById
 }
@@ -230,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClientesClientIdClassificacaoRouteImport
       parentRoute: typeof AuthenticatedClientesClientIdRoute
     }
+    '/_authenticated/clientes/$clientId/classificacao-patrimonial': {
+      id: '/_authenticated/clientes/$clientId/classificacao-patrimonial'
+      path: '/classificacao-patrimonial'
+      fullPath: '/clientes/$clientId/classificacao-patrimonial'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
     '/_authenticated/clientes/$clientId/contas': {
       id: '/_authenticated/clientes/$clientId/contas'
       path: '/contas'
@@ -265,16 +298,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClientesClientIdIndicadoresRouteImport
       parentRoute: typeof AuthenticatedClientesClientIdRoute
     }
+    '/_authenticated/clientes/$clientId/treinamento': {
+      id: '/_authenticated/clientes/$clientId/treinamento'
+      path: '/treinamento'
+      fullPath: '/clientes/$clientId/treinamento'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdTreinamentoRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
   }
 }
 
 interface AuthenticatedClientesClientIdRouteChildren {
   AuthenticatedClientesClientIdClassificacaoRoute: typeof AuthenticatedClientesClientIdClassificacaoRoute
+  AuthenticatedClientesClientIdClassificacaoPatrimonialRoute: typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   AuthenticatedClientesClientIdContasRoute: typeof AuthenticatedClientesClientIdContasRoute
   AuthenticatedClientesClientIdDreRoute: typeof AuthenticatedClientesClientIdDreRoute
   AuthenticatedClientesClientIdGovernancaRoute: typeof AuthenticatedClientesClientIdGovernancaRoute
   AuthenticatedClientesClientIdImportarRoute: typeof AuthenticatedClientesClientIdImportarRoute
   AuthenticatedClientesClientIdIndicadoresRoute: typeof AuthenticatedClientesClientIdIndicadoresRoute
+  AuthenticatedClientesClientIdTreinamentoRoute: typeof AuthenticatedClientesClientIdTreinamentoRoute
   AuthenticatedClientesClientIdIndexRoute: typeof AuthenticatedClientesClientIdIndexRoute
 }
 
@@ -282,6 +324,8 @@ const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdR
   {
     AuthenticatedClientesClientIdClassificacaoRoute:
       AuthenticatedClientesClientIdClassificacaoRoute,
+    AuthenticatedClientesClientIdClassificacaoPatrimonialRoute:
+      AuthenticatedClientesClientIdClassificacaoPatrimonialRoute,
     AuthenticatedClientesClientIdContasRoute:
       AuthenticatedClientesClientIdContasRoute,
     AuthenticatedClientesClientIdDreRoute:
@@ -292,6 +336,8 @@ const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdR
       AuthenticatedClientesClientIdImportarRoute,
     AuthenticatedClientesClientIdIndicadoresRoute:
       AuthenticatedClientesClientIdIndicadoresRoute,
+    AuthenticatedClientesClientIdTreinamentoRoute:
+      AuthenticatedClientesClientIdTreinamentoRoute,
     AuthenticatedClientesClientIdIndexRoute:
       AuthenticatedClientesClientIdIndexRoute,
   }
