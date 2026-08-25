@@ -736,7 +736,10 @@ function ClassificationPage() {
             {showClassificationForm && statementType === "resultado" && (
               <Button
                 onClick={() => {
-                  if (!form.account.trim()) return toast.error("Informe a conta gerencial.");
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta gerencial.");
+                    return;
+                  }
                   classify.mutate();
                 }}
                 disabled={classify.isPending}
@@ -747,7 +750,10 @@ function ClassificationPage() {
             {showClassificationForm && statementType === "balanco" && (
               <Button
                 onClick={() => {
-                  if (!form.account.trim()) return toast.error("Informe a conta patrimonial.");
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta patrimonial.");
+                    return;
+                  }
                   classifyBalance.mutate();
                 }}
                 disabled={classifyBalance.isPending}
