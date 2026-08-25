@@ -82,10 +82,12 @@ function ClassificationPage() {
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
+  const confirmCurrent = useServerFn(confirmCurrentClassifications);
 
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [reclassifyMode, setReclassifyMode] = useState(false);
   const [form, setForm] = useState<{
     account: string;
     nature: Nature;
