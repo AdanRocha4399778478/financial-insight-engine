@@ -4,6 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { getClientMetrics } from "@/lib/dre.functions";
 import { listImports } from "@/lib/imports.functions";
 import { pct } from "@/lib/finance";
+import { ImportIntegrityStatus, type IntegrityStatus } from "@/components/import-integrity-status";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/clientes/$clientId/")({
   head: () => ({
@@ -32,6 +34,14 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
+function importStatusLabel(status: string | null) {
+  if (status === "conciliado") return "Conciliada";
+  if (status === "divergente") return "Divergente";
+  if (status === "fechamento_inferido") return "Ressalva";
+  if (status === "nao_verificado") return "Revisar";
+  return "Sem avaliação";
+}
+
 function Overview() {
   const { clientId } = Route.useParams();
   const fetchMetrics = useServerFn(getClientMetrics);
@@ -47,6 +57,7 @@ function Overview() {
   });
 
   const m = metrics.data;
+  const latestImport = imports.data?.[0];
 
   return (
     <div className="space-y-10">
@@ -65,13 +76,23 @@ function Overview() {
         <Stat label="Regras ativas" value={String(m?.rules ?? 0)} hint="Aprendizado do cliente" />
       </div>
 
+      {latestImport && (
+        <ImportIntegrityStatus
+          clientId={clientId}
+          status={latestImport.integrity_status as IntegrityStatus}
+          filename={latestImport.filename}
+          checkedAt={latestImport.integrity_checked_at}
+          difference={latestImport.balance_difference}
+        />
+      )}
+
       {(m?.pending ?? 0) > 0 && (
         <div className="rounded-lg border border-primary/40 bg-primary/5 p-6">
           <p className="font-display text-sm font-semibold">
             {m?.pending} lançamento(s) aguardando classificação.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            A DRE só considera base validada. Trate as pendências antes de apresentar o resultado.
+            A DRE só considera lançamentos classificados. Trate as pendências antes de apresentar o resultado.
           </p>
           <Link
             to="/clientes/$clientId/classificacao"
@@ -94,7 +115,10 @@ function Overview() {
           {imports.data?.slice(0, 8).map((imp) => (
             <div key={imp.id} className="flex flex-wrap items-center justify-between gap-3 bg-card p-4">
               <div>
-                <p className="text-sm font-medium">{imp.filename}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium">{imp.filename}</p>
+                  <Badge variant="outline">{importStatusLabel(imp.integrity_status)}</Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {new Date(imp.created_at).toLocaleString("pt-BR")}
                   {imp.period_label ? ` · ${imp.period_label}` : ""}
