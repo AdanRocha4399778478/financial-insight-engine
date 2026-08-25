@@ -9,7 +9,7 @@ const periodSchema = z.object({
   dimension: z.string().max(120).nullable(),
 });
 
-/** Somente base validada entra na DRE: pendentes ficam de fora (spec §24 - Teste D). */
+/** Somente base validada de Resultado entra na DRE; Balanço e pendentes ficam de fora. */
 export const getDreData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => periodSchema.parse(input))
@@ -19,6 +19,7 @@ export const getDreData = createServerFn({ method: "GET" })
         .from("entries")
         .select("entry_date, amount, nature, behavior, account, area, excluded_from_dre, status, cost_center")
         .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
         .in("status", ["auto", "confirmado", "sugerido"])
         .limit(50000);
 
@@ -40,10 +41,10 @@ export const getDreData = createServerFn({ method: "GET" })
       .from("entries")
       .select("cost_center")
       .eq("client_id", data.clientId)
+      .eq("statement_type", "resultado")
       .not("cost_center", "is", null)
       .limit(5000);
 
-    // Importações tipo "DRE pronta": contas já mapeadas ao Plano Gerencial entram na DRE.
     const { data: facts } = await context.supabase
       .from("dre_facts")
       .select("period, amount, account_code, account_name")
@@ -54,14 +55,14 @@ export const getDreData = createServerFn({ method: "GET" })
 
     const { data: maps } = await context.supabase
       .from("account_mappings")
-      .select("account_code, account_name, nature, behavior, area, active")
+      .select("account_code, account_name, nature, behavior, area, active, statement_type")
       .eq("client_id", data.clientId)
       .limit(20000);
 
     const mapByCode = new Map((maps ?? []).map((m) => [m.account_code, m]));
     const factRows = (facts ?? []).flatMap((f) => {
       const m = mapByCode.get(f.account_code);
-      if (!m || !m.active || m.nature === "nao_definido") return [];
+      if (!m || !m.active || m.statement_type !== "resultado" || m.nature === "nao_definido") return [];
       return [
         {
           entry_date: f.period,
@@ -81,7 +82,7 @@ export const getDreData = createServerFn({ method: "GET" })
       (facts ?? [])
         .filter((f) => {
           const m = mapByCode.get(f.account_code);
-          return !m || m.nature === "nao_definido";
+          return !m || m.statement_type !== "resultado" || m.nature === "nao_definido";
         })
         .map((f) => f.account_code),
     ).size;
@@ -117,6 +118,7 @@ export const getComparisonData = createServerFn({ method: "GET" })
         .from("entries")
         .select("entry_date, amount, nature, behavior, account")
         .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
         .in("status", ["auto", "confirmado", "sugerido"])
         .gte("entry_date", range.from)
         .lte("entry_date", range.to)
@@ -129,7 +131,6 @@ export const getComparisonData = createServerFn({ method: "GET" })
     return result;
   });
 
-/** Drill-down: do valor agregado até os lançamentos de origem (spec §18). */
 export const drilldownEntries = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
@@ -149,6 +150,7 @@ export const drilldownEntries = createServerFn({ method: "GET" })
       .from("entries")
       .select("id, entry_date, description, counterparty, amount, account, area, status, confidence, classification_source, original_category")
       .eq("client_id", data.clientId)
+      .eq("statement_type", "resultado")
       .eq("nature", data.nature as never)
       .in("status", ["auto", "confirmado", "sugerido"])
       .gte("entry_date", data.from)
