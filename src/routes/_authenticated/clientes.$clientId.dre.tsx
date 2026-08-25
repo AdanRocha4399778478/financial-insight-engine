@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { drilldownEntries, getDreData } from "@/lib/dre.functions";
+import { listImports } from "@/lib/imports.functions";
 import {
   NATURE_LABEL,
   brl,
@@ -13,6 +14,7 @@ import {
   type DreRow,
   type Nature,
 } from "@/lib/finance";
+import { ImportIntegrityStatus, type IntegrityStatus } from "@/components/import-integrity-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +63,7 @@ function DrePage() {
   const { clientId } = Route.useParams();
   const fetchDre = useServerFn(getDreData);
   const fetchDrill = useServerFn(drilldownEntries);
+  const fetchImports = useServerFn(listImports);
 
   const [range, setRange] = useState(defaultRange);
   const [dimension, setDimension] = useState(ALL);
@@ -79,6 +82,11 @@ function DrePage() {
           dimension: dimension === ALL ? null : dimension,
         },
       }),
+  });
+
+  const imports = useQuery({
+    queryKey: ["imports", clientId],
+    queryFn: () => fetchImports({ data: { clientId } }),
   });
 
   const drillQuery = useQuery({
@@ -109,6 +117,7 @@ function DrePage() {
   }, [dre.data]);
 
   const hasData = (dre.data?.rows.length ?? 0) > 0;
+  const latestImport = imports.data?.[0];
   const rl = result.receitaLiquida;
   const share = (value: number) => (rl > 0 ? pct((value / rl) * 100) : "—");
 
@@ -199,19 +208,30 @@ function DrePage() {
         )}
       </div>
 
+      {latestImport && (
+        <ImportIntegrityStatus
+          clientId={clientId}
+          status={latestImport.integrity_status as IntegrityStatus}
+          filename={latestImport.filename}
+          checkedAt={latestImport.integrity_checked_at}
+          difference={latestImport.balance_difference}
+          compact
+        />
+      )}
+
       {(dre.data?.pendingCount ?? 0) > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-5">
           <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
           <p className="text-sm">
             <strong>{dre.data?.pendingCount} lançamento(s) pendentes</strong> no período não entram
-            neste demonstrativo. A DRE só considera base validada.
+            neste demonstrativo. A DRE só considera lançamentos classificados.
           </p>
         </div>
       )}
 
       {!hasData ? (
         <div className="rounded-lg border border-dashed border-border p-16 text-center text-sm text-muted-foreground">
-          Sem base validada no período selecionado.
+          Sem lançamentos classificados no período selecionado.
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
