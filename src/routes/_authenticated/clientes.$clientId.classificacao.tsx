@@ -13,6 +13,7 @@ import {
 } from "@/lib/entries.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
+import { diagnoseTrainingMatchGaps } from "@/lib/training-match-diagnostics.functions";
 import {
   AREAS,
   BEHAVIORS,
@@ -74,12 +75,19 @@ const statusTone: Record<EntryStatus, string> = {
   ignorado: "bg-muted text-muted-foreground line-through",
 };
 
+const relationLabel = {
+  direction_mismatch: "direção diferente",
+  partial_identity: "identidade parcial",
+  no_candidate: "sem candidato",
+} as const;
+
 function ClassificationPage() {
   const { clientId } = Route.useParams();
   const queryClient = useQueryClient();
 
   const fetchEntries = useServerFn(listEntries);
   const fetchPendingIdentitySummary = useServerFn(listPendingIdentitySummary);
+  const fetchMatchDiagnostics = useServerFn(diagnoseTrainingMatchGaps);
   const applyClassification = useServerFn(classifyEntries);
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
@@ -110,6 +118,11 @@ function ClassificationPage() {
   const pendingIdentitySummary = useQuery({
     queryKey: ["pending-identity-summary", clientId],
     queryFn: () => fetchPendingIdentitySummary({ data: { clientId, limit: 10 } }),
+  });
+
+  const matchDiagnostics = useQuery({
+    queryKey: ["training-match-diagnostics", clientId],
+    queryFn: () => fetchMatchDiagnostics({ data: { clientId, limit: 10 } }),
   });
 
   const rows = entries.data?.rows ?? [];
@@ -269,6 +282,54 @@ function ClassificationPage() {
                     <td className="max-w-md px-4 py-3 text-muted-foreground">
                       <p className="truncate">{item.sampleDescription}</p>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {matchDiagnostics.data && matchDiagnostics.data.totalPending > 0 && (
+        <section className="rounded-lg border border-primary/20 bg-card p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-display text-sm font-semibold">Diagnóstico do casamento com treinamento</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {matchDiagnostics.data.activeTrainingKeys} chave(s) históricas ativas ·{" "}
+                {matchDiagnostics.data.exactMatches} match(es) exato(s) ·{" "}
+                {matchDiagnostics.data.uncoveredIdentities} identidade(s) sem cobertura
+              </p>
+            </div>
+            <Badge variant="outline">somente diagnóstico</Badge>
+          </div>
+
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Pendente</th>
+                  <th className="px-4 py-3">Relação</th>
+                  <th className="px-4 py-3">Candidato histórico</th>
+                  <th className="px-4 py-3">Conta</th>
+                  <th className="px-4 py-3 text-right">Ocorrências</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {matchDiagnostics.data.items.map((item) => (
+                  <tr key={item.pendingKey}>
+                    <td className="max-w-xs px-4 py-3 font-mono text-xs">
+                      <p className="truncate">{item.pendingKey}</p>
+                      <p className="mt-1 truncate text-muted-foreground">{item.sampleDescription}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="secondary">{relationLabel[item.relation]}</Badge>
+                    </td>
+                    <td className="max-w-xs px-4 py-3 font-mono text-xs text-muted-foreground">
+                      <p className="truncate">{item.candidateKey ?? "—"}</p>
+                    </td>
+                    <td className="px-4 py-3">{item.candidateAccount ?? "—"}</td>
+                    <td className="px-4 py-3 text-right">{item.count}</td>
                   </tr>
                 ))}
               </tbody>
