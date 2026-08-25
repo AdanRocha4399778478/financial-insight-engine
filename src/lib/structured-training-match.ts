@@ -93,6 +93,18 @@ function classificationKey(item: HistoryLike): string {
   return `${item.account}|${item.nature}|${item.behavior}|${item.area ?? ""}`;
 }
 
+function tokenSet(value: string): Set<string> {
+  return new Set(stableTokens(value));
+}
+
+function sharesCoreIdentity(a: string, b: string): boolean {
+  const left = tokenSet(a);
+  const right = tokenSet(b);
+  let common = 0;
+  for (const token of left) if (right.has(token)) common += 1;
+  return common >= 2;
+}
+
 /**
  * Segundo nivel conservador de matching.
  *
@@ -103,7 +115,7 @@ function classificationKey(item: HistoryLike): string {
  * - exige a mesma classe financeira, nunca classe neutra;
  * - ignora palavras da operacao e numeros para comparar a identidade economica real;
  * - exige pelo menos dois tokens estaveis em comum e similaridade minima de 60%;
- * - candidatos quase empatados (ate 5 p.p.) precisam apontar para a mesma classificacao;
+ * - se houver candidatos da mesma familia de identidade apontando para classificacoes diferentes, nao sugere;
  * - o retorno continua sendo apenas sugestao, nunca automatico.
  */
 export function findStructuredTrainingMatch(
@@ -126,16 +138,18 @@ export function findStructuredTrainingMatch(
 
       const similarity = structuredSimilarity(pending.subject, historical.subject);
       if (similarity < 0.6) return null;
-      return { history: item, similarity };
+      return { history: item, subject: historical.subject, similarity };
     })
-    .filter((item): item is { history: HistoryLike; similarity: number } => Boolean(item))
+    .filter((item): item is { history: HistoryLike; subject: string; similarity: number } => Boolean(item))
     .sort((a, b) => b.similarity - a.similarity);
 
   const best = candidates[0];
   if (!best) return null;
 
-  const nearBest = candidates.filter((candidate) => best.similarity - candidate.similarity <= 0.05);
-  const classifications = new Set(nearBest.map(({ history: item }) => classificationKey(item)));
+  const sameIdentityFamily = candidates.filter((candidate) =>
+    sharesCoreIdentity(best.subject, candidate.subject),
+  );
+  const classifications = new Set(sameIdentityFamily.map(({ history: item }) => classificationKey(item)));
   if (classifications.size > 1) return null;
 
   return {
