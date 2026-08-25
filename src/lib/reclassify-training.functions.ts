@@ -4,6 +4,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Json, TablesInsert } from "@/integrations/supabase/types";
 import { classifyEntry, historyKey, type RuleLike } from "./classify";
 import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
+import { findStructuredTrainingMatch } from "./structured-training-match";
+
+const STRUCTURED_TRAINING_CONFIDENCE = 0.72;
+const STRUCTURED_TRAINING_SOURCE = "training_structured";
 
 export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -82,48 +86,63 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
 
     let automatic = 0;
     let suggested = 0;
+    let structuredSuggested = 0;
     let unchanged = 0;
     const auditRows: TablesInsert<"classification_audit">[] = [];
 
     for (const row of pendingRows ?? []) {
-      const result = classifyEntry(
-        {
-          description: row.description,
-          counterparty: row.counterparty,
-          original_category: row.original_category,
-          amount: Number(row.amount),
-        },
-        {
-          clientId: data.clientId,
-          segment: client.segment,
-          rules: (rules ?? []) as unknown as RuleLike[],
-          history,
-        },
-      );
+      const rawEntry = {
+        description: row.description,
+        counterparty: row.counterparty,
+        original_category: row.original_category,
+        amount: Number(row.amount),
+      };
+      const result = classifyEntry(rawEntry, {
+        clientId: data.clientId,
+        segment: client.segment,
+        rules: (rules ?? []) as unknown as RuleLike[],
+        history,
+      });
 
+      let next = result;
       if (result.status === "pendente" || !result.account) {
-        unchanged += 1;
-        continue;
+        const key = historyKey({ description: row.description, counterparty: row.counterparty });
+        const structured = key ? findStructuredTrainingMatch(rawEntry, history, key) : null;
+        if (!structured) {
+          unchanged += 1;
+          continue;
+        }
+
+        next = {
+          account: structured.history.account,
+          nature: structured.history.nature,
+          behavior: structured.history.behavior,
+          area: structured.history.area,
+          confidence: STRUCTURED_TRAINING_CONFIDENCE,
+          source: STRUCTURED_TRAINING_SOURCE,
+          status: "sugerido",
+        };
+        structuredSuggested += 1;
       }
 
       const { error: updateError } = await supabase
         .from("entries")
         .update({
-          account: result.account,
-          nature: result.nature,
-          behavior: result.behavior,
-          area: result.area,
-          confidence: result.confidence,
-          classification_source: result.source,
-          status: result.status,
-          excluded_from_dre: result.nature === "excluido",
+          account: next.account,
+          nature: next.nature,
+          behavior: next.behavior,
+          area: next.area,
+          confidence: next.confidence,
+          classification_source: next.source,
+          status: next.status,
+          excluded_from_dre: next.nature === "excluido",
         })
         .eq("client_id", data.clientId)
         .eq("id", row.id)
         .eq("status", "pendente");
       if (updateError) throw new Error(updateError.message);
 
-      if (result.status === "auto") automatic += 1;
+      if (next.status === "auto") automatic += 1;
       else suggested += 1;
 
       auditRows.push({
@@ -138,14 +157,14 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
           status: row.status,
         } as Json,
         next: {
-          account: result.account,
-          nature: result.nature,
-          behavior: result.behavior,
-          area: result.area,
-          status: result.status,
+          account: next.account,
+          nature: next.nature,
+          behavior: next.behavior,
+          area: next.area,
+          status: next.status,
         } as Json,
-        source: result.source,
-        confidence: result.confidence,
+        source: next.source,
+        confidence: next.confidence,
         became_rule: false,
       });
     }
@@ -161,6 +180,7 @@ export const reclassifyPendingFromLearning = createServerFn({ method: "POST" })
       analyzed: pendingRows?.length ?? 0,
       automatic,
       suggested,
+      structuredSuggested,
       remaining: unchanged,
       historyExamples: history.length,
       historyConflicts: conflicts.size,
