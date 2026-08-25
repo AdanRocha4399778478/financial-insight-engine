@@ -12,6 +12,7 @@ import {
   suggestWithAI,
 } from "@/lib/entries.functions";
 import { classifyBalanceEntries } from "@/lib/balance-classification.functions";
+import { confirmCurrentClassifications } from "@/lib/confirm-current-classifications.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
 import { diagnoseTrainingMatchGaps } from "@/lib/training-match-diagnostics.functions";
@@ -99,6 +100,7 @@ function ClassificationPage() {
   const fetchMatchDiagnostics = useServerFn(diagnoseTrainingMatchGaps);
   const applyClassification = useServerFn(classifyEntries);
   const applyBalanceClassification = useServerFn(classifyBalanceEntries);
+  const confirmCurrent = useServerFn(confirmCurrentClassifications);
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
@@ -107,6 +109,7 @@ function ClassificationPage() {
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [reclassifyMode, setReclassifyMode] = useState(false);
   const [statementType, setStatementType] = useState<StatementType>("resultado");
   const [balanceGroup, setBalanceGroup] = useState<BalanceGroup>("passivo");
   const [form, setForm] = useState<{
@@ -146,6 +149,32 @@ function ClassificationPage() {
     [rows, selected],
   );
 
+  const selectionStats = useMemo(() => {
+    let resultado = 0;
+    let balanco = 0;
+    const groups = new Map<string, number>();
+
+    for (const row of selectedRows) {
+      if (row.statement_type === "balanco") balanco += 1;
+      else resultado += 1;
+
+      const secondary =
+        row.statement_type === "balanco"
+          ? `Balanço · ${BALANCE_GROUP_LABEL[row.balance_group as BalanceGroup] ?? "Sem grupo"}`
+          : `${NATURE_LABEL[row.nature as Nature]} · ${BEHAVIOR_LABEL[row.behavior as Behavior]}`;
+      const key = row.account ? `${row.account} · ${secondary}` : "Sem classificação";
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+    }
+
+    const top = [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    return {
+      resultado,
+      balanco,
+      top,
+      heterogeneous: groups.size > 1,
+    };
+  }, [selectedRows]);
+
   const suggestionGroups = useMemo(() => {
     if (status !== "sugerido") return [];
     const groups = new Map<string, { account: string; nature: string; behavior: string; count: number }>();
@@ -159,8 +188,13 @@ function ClassificationPage() {
     return [...groups.values()].sort((a, b) => b.count - a.count);
   }, [rows, status]);
 
+  const isAutomaticFilter = status === "auto";
+  const showClassificationForm =
+    status !== "sugerido" && (!isAutomaticFilter || reclassifyMode);
+
   const refresh = () => {
     setSelected([]);
+    setReclassifyMode(false);
     queryClient.invalidateQueries();
   };
 
@@ -205,6 +239,20 @@ function ClassificationPage() {
     onSuccess: (result) => {
       toast.success(`${result.updated} lançamento(s) confirmados no Balanço Patrimonial.`);
       setForm({ ...form, account: "" });
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const confirmAutomatic = useMutation({
+    mutationFn: () => confirmCurrent({ data: { clientId, entryIds: selected } }),
+    onSuccess: (result) => {
+      const { learned, duplicates, conflicts } = result.learning;
+      const learningSummary =
+        learned + duplicates + conflicts > 0
+          ? ` · aprendizado: ${learned} novo(s), ${duplicates} já existente(s), ${conflicts} conflito(s)`
+          : "";
+      toast.success(`${result.updated} classificação(ões) atual(is) confirmada(s)${learningSummary}.`);
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -268,6 +316,7 @@ function ClassificationPage() {
             onClick={() => {
               setStatus(filter.key);
               setSelected([]);
+              setReclassifyMode(false);
             }}
             className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
               status === filter.key
@@ -434,7 +483,26 @@ function ClassificationPage() {
             {selected.length} lançamento(s) selecionado(s)
           </p>
 
-          {status !== "sugerido" && (
+          {isAutomaticFilter && (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
+                <Badge variant="outline">Balanço: {selectionStats.balanco}</Badge>
+                {selectionStats.top.map(([label, count]) => (
+                  <Badge key={label} variant="secondary">
+                    {count}× {label}
+                  </Badge>
+                ))}
+              </div>
+              {selectionStats.heterogeneous && (
+                <p className="mt-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
+                  A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substituirá todos os selecionados pela nova classificação.
+                </p>
+              )}
+            </>
+          )}
+
+          {showClassificationForm && (
             <>
               <div className="mt-5 grid gap-4 lg:grid-cols-4">
                 <div className="space-y-2">
@@ -596,7 +664,21 @@ function ClassificationPage() {
           )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {status !== "sugerido" && statementType === "resultado" && (
+            {isAutomaticFilter && !reclassifyMode && (
+              <>
+                <Button
+                  onClick={() => confirmAutomatic.mutate()}
+                  disabled={confirmAutomatic.isPending}
+                >
+                  {confirmAutomatic.isPending ? "Confirmando..." : "Confirmar classificações atuais"}
+                </Button>
+                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>
+                  Reclassificar seleção
+                </Button>
+              </>
+            )}
+
+            {showClassificationForm && statementType === "resultado" && (
               <Button
                 onClick={() => {
                   if (!form.account.trim()) {
@@ -607,10 +689,10 @@ function ClassificationPage() {
                 }}
                 disabled={classify.isPending}
               >
-                Confirmar classificação
+                {isAutomaticFilter ? "Aplicar nova classificação" : "Confirmar classificação"}
               </Button>
             )}
-            {status !== "sugerido" && statementType === "balanco" && (
+            {showClassificationForm && statementType === "balanco" && (
               <Button
                 onClick={() => {
                   if (!form.account.trim()) {
@@ -629,16 +711,27 @@ function ClassificationPage() {
                 {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
               </Button>
             )}
-            {status !== "sugerido" && statementType === "resultado" && (
+            {showClassificationForm && statementType === "resultado" && (
               <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
               </Button>
             )}
+            {isAutomaticFilter && reclassifyMode && (
+              <Button variant="ghost" onClick={() => setReclassifyMode(false)}>
+                Cancelar reclassificação
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>
               Ignorar da DRE
             </Button>
-            <Button variant="ghost" onClick={() => setSelected([])}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSelected([]);
+                setReclassifyMode(false);
+              }}
+            >
               Limpar seleção
             </Button>
           </div>
