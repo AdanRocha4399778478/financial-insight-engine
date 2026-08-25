@@ -11,6 +11,7 @@ import {
   listEntries,
   suggestWithAI,
 } from "@/lib/entries.functions";
+import { confirmCurrentClassifications } from "@/lib/confirm-current-classifications.functions";
 import {
   AREAS,
   BEHAVIORS,
@@ -81,10 +82,12 @@ function ClassificationPage() {
   const confirm = useServerFn(confirmSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
+  const confirmCurrent = useServerFn(confirmCurrentClassifications);
 
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [reclassifyMode, setReclassifyMode] = useState(false);
   const [form, setForm] = useState<{
     account: string;
     nature: Nature;
@@ -112,8 +115,33 @@ function ClassificationPage() {
     [rows, selected],
   );
 
+  const BALANCE_NATURES = ["transferencia", "excluido"];
+  const selectionStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    let balance = 0;
+    for (const row of selectedRows) {
+      if (BALANCE_NATURES.includes(String(row.nature))) balance += 1;
+      const key = row.account?.trim()
+        ? `${row.account} · ${NATURE_LABEL[row.nature as Nature]}`
+        : "Sem classificação";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    return {
+      total: selectedRows.length,
+      balance,
+      result: selectedRows.length - balance,
+      top,
+      heterogeneous: counts.size > 1,
+    };
+  }, [selectedRows]);
+
+  const isAuto = status === "auto";
+  const showForm = !isAuto || reclassifyMode;
+
   const refresh = () => {
     setSelected([]);
+    setReclassifyMode(false);
     queryClient.invalidateQueries();
   };
 
@@ -172,6 +200,21 @@ function ClassificationPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const confirmAuto = useMutation({
+    mutationFn: () => confirmCurrent({ data: { clientId, entryIds: selected, learn: true } }),
+    onSuccess: (r) => {
+      const learning = r.learning;
+      toast.success(
+        `${r.updated} classificação(ões) confirmada(s)` +
+          (learning
+            ? ` · aprendidos ${learning.learned}, já existentes ${learning.existing}, conflitos ${learning.conflicted}`
+            : ""),
+      );
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -181,6 +224,7 @@ function ClassificationPage() {
             onClick={() => {
               setStatus(filter.key);
               setSelected([]);
+              setReclassifyMode(false);
             }}
             className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
               status === filter.key
@@ -209,8 +253,31 @@ function ClassificationPage() {
             {selected.length} lançamento(s) selecionado(s)
           </p>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full border border-border px-3 py-1">
+              Resultado (DRE): {selectionStats.result}
+            </span>
+            <span className="rounded-full border border-border px-3 py-1">
+              Balanço: {selectionStats.balance}
+            </span>
+            {selectionStats.top.map(([label, count]) => (
+              <span key={label} className="rounded-full border border-border px-3 py-1">
+                {label} · {count}
+              </span>
+            ))}
+          </div>
+
+          {selectionStats.heterogeneous && (
+            <p className="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs text-foreground">
+              A seleção contém classificações diferentes. Confirmar mantém cada classificação atual;
+              reclassificar substituirá todos os selecionados pela nova classificação.
+            </p>
+          )}
+
+          {showForm && (
           <div className="mt-5 grid gap-4 lg:grid-cols-4">
             <div className="space-y-2">
+
               <Label htmlFor="account">Conta gerencial</Label>
               <Input
                 id="account"
@@ -273,7 +340,9 @@ function ClassificationPage() {
               </Select>
             </div>
           </div>
+          )}
 
+          {showForm && (
           <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
             <div className="flex items-center gap-3">
               <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
@@ -303,34 +372,71 @@ function ClassificationPage() {
               </>
             )}
           </div>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              onClick={() => {
-                if (!form.account.trim()) {
-                  toast.error("Informe a conta gerencial.");
-                  return;
-                }
-                classify.mutate();
-              }}
-              disabled={classify.isPending}
-            >
-              Confirmar classificação
-            </Button>
-            <Button variant="secondary" onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
-              Aceitar sugestões atuais
-            </Button>
-            <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
-            </Button>
+            {isAuto && !reclassifyMode && (
+              <>
+                <Button onClick={() => confirmAuto.mutate()} disabled={confirmAuto.isPending}>
+                  {confirmAuto.isPending ? "Confirmando..." : "Confirmar classificações atuais"}
+                </Button>
+                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>
+                  Reclassificar seleção
+                </Button>
+              </>
+            )}
+
+            {showForm && (
+              <Button
+                onClick={() => {
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta gerencial.");
+                    return;
+                  }
+                  classify.mutate();
+                }}
+                disabled={classify.isPending}
+              >
+                {isAuto ? "Aplicar nova classificação" : "Confirmar classificação"}
+              </Button>
+            )}
+
+            {isAuto && reclassifyMode && (
+              <Button variant="ghost" onClick={() => setReclassifyMode(false)}>
+                Cancelar reclassificação
+              </Button>
+            )}
+
+            {!isAuto && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => bulkConfirm.mutate()}
+                  disabled={bulkConfirm.isPending}
+                >
+                  Aceitar sugestões atuais
+                </Button>
+                <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
+                </Button>
+              </>
+            )}
+
             <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>
               Ignorar da DRE
             </Button>
-            <Button variant="ghost" onClick={() => setSelected([])}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSelected([]);
+                setReclassifyMode(false);
+              }}
+            >
               Limpar seleção
             </Button>
           </div>
+
 
           {selectedRows.length > 0 && (
             <p className="mt-4 text-xs text-muted-foreground">
