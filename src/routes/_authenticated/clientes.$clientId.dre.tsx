@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { drilldownEntries, getClientDataRange, getDreData } from "@/lib/dre.functions";
 import { listImports } from "@/lib/imports.functions";
@@ -93,9 +93,9 @@ function DrePage() {
   const fetchDrill = useServerFn(drilldownEntries);
   const fetchImports = useServerFn(listImports);
   const fetchDataRange = useServerFn(getClientDataRange);
-  const initializedRange = useRef(false);
 
   const [range, setRange] = useState<DateRange>(fallbackRange);
+  const [readyClientId, setReadyClientId] = useState<string | null>(null);
   const [dimension, setDimension] = useState(ALL);
   const [drill, setDrill] = useState<{ nature: Nature; account: string | null; label: string } | null>(
     null,
@@ -107,13 +107,13 @@ function DrePage() {
   });
 
   useEffect(() => {
-    if (initializedRange.current || dataRange.isLoading) return;
-    initializedRange.current = true;
+    if (readyClientId === clientId || dataRange.isLoading) return;
 
     const params = new URLSearchParams(window.location.search);
     const urlRange = { from: params.get("from") ?? "", to: params.get("to") ?? "" };
     if (validRange(urlRange)) {
       setRange(urlRange);
+      setReadyClientId(clientId);
       return;
     }
 
@@ -123,6 +123,7 @@ function DrePage() {
         const parsed = JSON.parse(saved) as unknown;
         if (validRange(parsed)) {
           setRange(parsed);
+          setReadyClientId(clientId);
           return;
         }
       }
@@ -130,11 +131,13 @@ function DrePage() {
       // localStorage indisponível ou valor antigo inválido: segue para o período inteligente.
     }
 
-    if (dataRange.data) setRange(dataRange.data);
-  }, [clientId, dataRange.data, dataRange.isLoading]);
+    setRange(dataRange.data ?? fallbackRange());
+    setReadyClientId(clientId);
+  }, [clientId, dataRange.data, dataRange.isLoading, readyClientId]);
 
   useEffect(() => {
-    if (!initializedRange.current) return;
+    if (readyClientId !== clientId) return;
+
     try {
       window.localStorage.setItem(`dre-range:${clientId}`, JSON.stringify(range));
     } catch {
@@ -145,7 +148,7 @@ function DrePage() {
     url.searchParams.set("from", range.from);
     url.searchParams.set("to", range.to);
     window.history.replaceState(window.history.state, "", url.toString());
-  }, [clientId, range]);
+  }, [clientId, range, readyClientId]);
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, dimension],
