@@ -53,11 +53,26 @@ function subjectOf(key: string): string {
   return key.replace(/^(ENTRADA|SAIDA)\|/, "");
 }
 
+function identityClass(subject: string): "financial_charge" | "financing_principal" | "neutral" {
+  if (/\b(IOF|JUROS|TARIFA|ENCARGO|MULTA)\b/.test(subject)) return "financial_charge";
+  if (/\b(LIBERACAO CREDITO|EMPRESTIMO|FINANCIAMENTO|AMORTIZACAO)\b/.test(subject)) return "financing_principal";
+  return "neutral";
+}
+
 function relationFor(pendingKey: string, trainingKey: string): "direction_mismatch" | "partial_identity" | null {
   const pendingSubject = subjectOf(pendingKey);
   const trainingSubject = subjectOf(trainingKey);
 
   if (pendingSubject === trainingSubject && pendingKey !== trainingKey) return "direction_mismatch";
+
+  const pendingClass = identityClass(pendingSubject);
+  const trainingClass = identityClass(trainingSubject);
+  if (
+    (pendingClass === "financial_charge" && trainingClass === "financing_principal") ||
+    (pendingClass === "financing_principal" && trainingClass === "financial_charge")
+  ) {
+    return null;
+  }
 
   if (
     pendingSubject.length >= 8 &&
