@@ -200,6 +200,21 @@ function ClassificationPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const confirmAuto = useMutation({
+    mutationFn: () => confirmCurrent({ data: { clientId, entryIds: selected, learn: true } }),
+    onSuccess: (r) => {
+      const learning = r.learning;
+      toast.success(
+        `${r.updated} classificação(ões) confirmada(s)` +
+          (learning
+            ? ` · aprendidos ${learning.learned}, já existentes ${learning.existing}, conflitos ${learning.conflicted}`
+            : ""),
+      );
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
