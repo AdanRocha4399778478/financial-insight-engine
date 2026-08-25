@@ -635,7 +635,7 @@ function ImportPage() {
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Períodos</p>
-                  <p className="mt-1 text-xl font-semibold">{structure.periods.length}</p>
+                  <p className="mt-1 text-xl font-semibold">{structure?.periods.length ?? 0}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Valores</p>
