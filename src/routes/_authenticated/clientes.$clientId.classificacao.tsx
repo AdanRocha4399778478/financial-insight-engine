@@ -134,6 +134,19 @@ function ClassificationPage() {
     [rows, selected],
   );
 
+  const suggestionGroups = useMemo(() => {
+    if (status !== "sugerido") return [];
+    const groups = new Map<string, { account: string; nature: string; behavior: string; count: number }>();
+    for (const row of rows) {
+      if (!row.account) continue;
+      const key = `${row.account}|${row.nature}|${row.behavior}`;
+      const current = groups.get(key);
+      if (current) current.count += 1;
+      else groups.set(key, { account: row.account, nature: row.nature, behavior: row.behavior, count: 1 });
+    }
+    return [...groups.values()].sort((a, b) => b.count - a.count);
+  }, [rows, status]);
+
   const refresh = () => {
     setSelected([]);
     queryClient.invalidateQueries();
@@ -169,6 +182,15 @@ function ClassificationPage() {
 
   const bulkConfirm = useMutation({
     mutationFn: () => confirm({ data: { clientId, entryIds: selected } }),
+    onSuccess: (r) => {
+      toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const confirmVisibleSuggestions = useMutation({
+    mutationFn: () => confirm({ data: { clientId, entryIds: rows.map((row) => row.id) } }),
     onSuccess: (r) => {
       toast.success(`${r.updated} sugestão(ões) confirmada(s).`);
       refresh();
@@ -244,7 +266,43 @@ function ClassificationPage() {
         />
       </div>
 
-      {pendingIdentitySummary.data && pendingIdentitySummary.data.totalPending > 0 && (
+      {status === "sugerido" && rows.length > 0 && (
+        <section className="rounded-lg border border-primary/40 bg-primary/5 p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-display text-lg font-semibold">Revisar sugestões</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {rows.length} sugestão(ões) visível(is). Revise a lista abaixo e confirme em lote quando estiver de acordo.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {suggestionGroups.slice(0, 4).map((group) => (
+                  <Badge key={`${group.account}-${group.nature}-${group.behavior}`} variant="secondary">
+                    {group.count}× {group.account} · {NATURE_LABEL[group.nature as Nature]} · {BEHAVIOR_LABEL[group.behavior as Behavior]}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setSelected(rows.map((row) => row.id))}>
+                Selecionar todas
+              </Button>
+              <Button
+                onClick={() => confirmVisibleSuggestions.mutate()}
+                disabled={confirmVisibleSuggestions.isPending}
+              >
+                {confirmVisibleSuggestions.isPending
+                  ? "Confirmando..."
+                  : `Confirmar ${rows.length} sugestão(ões)`}
+              </Button>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">
+            A confirmação mantém a classificação já sugerida em cada lançamento; não é necessário preencher a conta novamente.
+          </p>
+        </section>
+      )}
+
+      {status === "pendente" && pendingIdentitySummary.data && pendingIdentitySummary.data.totalPending > 0 && (
         <section className="rounded-lg border border-border bg-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -290,7 +348,7 @@ function ClassificationPage() {
         </section>
       )}
 
-      {matchDiagnostics.data && matchDiagnostics.data.totalPending > 0 && (
+      {status === "pendente" && matchDiagnostics.data && matchDiagnostics.data.totalPending > 0 && (
         <section className="rounded-lg border border-primary/20 bg-card p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -344,121 +402,129 @@ function ClassificationPage() {
             {selected.length} lançamento(s) selecionado(s)
           </p>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="account">Conta gerencial</Label>
-              <Input
-                id="account"
-                maxLength={120}
-                placeholder="Combustível, Salários..."
-                value={form.account}
-                onChange={(e) => setForm({ ...form, account: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Natureza</Label>
-              <Select
-                value={form.nature}
-                onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NATURES.map((n) => (
-                    <SelectItem key={n} value={n}>
-                      {NATURE_LABEL[n]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Comportamento</Label>
-              <Select
-                value={form.behavior}
-                onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BEHAVIORS.map((b) => (
-                    <SelectItem key={b} value={b}>
-                      {BEHAVIOR_LABEL[b]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Área</Label>
-              <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Sem área</SelectItem>
-                  {AREAS.map((a) => (
-                    <SelectItem key={a} value={a}>
-                      {a}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {status !== "sugerido" && (
+            <>
+              <div className="mt-5 grid gap-4 lg:grid-cols-4">
+                <div className="space-y-2">
+                  <Label htmlFor="account">Conta gerencial</Label>
+                  <Input
+                    id="account"
+                    maxLength={120}
+                    placeholder="Combustível, Salários..."
+                    value={form.account}
+                    onChange={(e) => setForm({ ...form, account: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Natureza</Label>
+                  <Select
+                    value={form.nature}
+                    onValueChange={(value) => setForm({ ...form, nature: value as Nature })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NATURES.map((n) => (
+                        <SelectItem key={n} value={n}>
+                          {NATURE_LABEL[n]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Comportamento</Label>
+                  <Select
+                    value={form.behavior}
+                    onValueChange={(value) => setForm({ ...form, behavior: value as Behavior })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BEHAVIORS.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {BEHAVIOR_LABEL[b]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Área</Label>
+                  <Select value={form.area} onValueChange={(value) => setForm({ ...form, area: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>Sem área</SelectItem>
+                      {AREAS.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
-            <div className="flex items-center gap-3">
-              <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
-              <Label htmlFor="rule">Aprender como regra do cliente</Label>
-            </div>
-            {createRule && (
-              <>
-                <Select
-                  value={ruleField}
-                  onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="description">Padrão na descrição</SelectItem>
-                    <SelectItem value="counterparty">Fornecedor</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  className="w-64"
-                  maxLength={200}
-                  placeholder="Texto do padrão (opcional)"
-                  value={rulePattern}
-                  onChange={(e) => setRulePattern(e.target.value)}
-                />
-              </>
-            )}
-          </div>
+              <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-border p-4">
+                <div className="flex items-center gap-3">
+                  <Switch id="rule" checked={createRule} onCheckedChange={setCreateRule} />
+                  <Label htmlFor="rule">Aprender como regra do cliente</Label>
+                </div>
+                {createRule && (
+                  <>
+                    <Select
+                      value={ruleField}
+                      onValueChange={(v) => setRuleField(v as "description" | "counterparty")}
+                    >
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="description">Padrão na descrição</SelectItem>
+                        <SelectItem value="counterparty">Fornecedor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      className="w-64"
+                      maxLength={200}
+                      placeholder="Texto do padrão (opcional)"
+                      value={rulePattern}
+                      onChange={(e) => setRulePattern(e.target.value)}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <Button
-              onClick={() => {
-                if (!form.account.trim()) {
-                  toast.error("Informe a conta gerencial.");
-                  return;
-                }
-                classify.mutate();
-              }}
-              disabled={classify.isPending}
-            >
-              Confirmar classificação
+            {status !== "sugerido" && (
+              <Button
+                onClick={() => {
+                  if (!form.account.trim()) {
+                    toast.error("Informe a conta gerencial.");
+                    return;
+                  }
+                  classify.mutate();
+                }}
+                disabled={classify.isPending}
+              >
+                Confirmar classificação
+              </Button>
+            )}
+            <Button variant={status === "sugerido" ? "default" : "secondary"} onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
+              {bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}
             </Button>
-            <Button variant="secondary" onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>
-              Aceitar sugestões atuais
-            </Button>
-            <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
-            </Button>
+            {status !== "sugerido" && (
+              <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>
               Ignorar da DRE
             </Button>
