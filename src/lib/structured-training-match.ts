@@ -77,31 +77,31 @@ function compatibleClass(a: IdentityClass, b: IdentityClass): boolean {
   return a !== "neutral" && a === b;
 }
 
-function structuredSimilarity(a: string, b: string): number {
-  const aTokens = new Set(stableTokens(a));
-  const bTokens = new Set(stableTokens(b));
-  if (aTokens.size < 2 || bTokens.size < 2) return 0;
-
+function tokenOverlap(a: string[], b: string[]): { common: number; similarity: number } {
+  const left = new Set(a);
+  const right = new Set(b);
   let common = 0;
-  for (const token of aTokens) if (bTokens.has(token)) common += 1;
-  if (common < 2) return 0;
+  for (const token of left) if (right.has(token)) common += 1;
+  const similarity = left.size && right.size ? common / Math.max(left.size, right.size) : 0;
+  return { common, similarity };
+}
 
-  return common / Math.max(aTokens.size, bTokens.size);
+function structuredSimilarity(a: string, b: string): number {
+  const aTokens = stableTokens(a);
+  const bTokens = stableTokens(b);
+  const { common, similarity } = tokenOverlap(aTokens, bTokens);
+  if (aTokens.length < 2 || bTokens.length < 2 || common < 2) return 0;
+  return similarity;
 }
 
 function classificationKey(item: HistoryLike): string {
   return `${item.account}|${item.nature}|${item.behavior}|${item.area ?? ""}`;
 }
 
-function tokenSet(value: string): Set<string> {
-  return new Set(stableTokens(value));
-}
-
-function sharesCoreIdentity(a: string, b: string): boolean {
-  const left = tokenSet(a);
-  const right = tokenSet(b);
-  let common = 0;
-  for (const token of left) if (right.has(token)) common += 1;
+function belongsToPendingIdentityFamily(pendingSubject: string, candidateSubject: string): boolean {
+  const pendingTokens = stableTokens(pendingSubject);
+  const candidateTokens = stableTokens(candidateSubject);
+  const { common } = tokenOverlap(pendingTokens, candidateTokens);
   return common >= 2;
 }
 
@@ -115,7 +115,7 @@ function sharesCoreIdentity(a: string, b: string): boolean {
  * - exige a mesma classe financeira, nunca classe neutra;
  * - ignora palavras da operacao e numeros para comparar a identidade economica real;
  * - exige pelo menos dois tokens estaveis em comum e similaridade minima de 60%;
- * - se houver candidatos da mesma familia de identidade apontando para classificacoes diferentes, nao sugere;
+ * - se qualquer candidato da mesma familia da pendencia apontar para classificacao diferente, nao sugere;
  * - o retorno continua sendo apenas sugestao, nunca automatico.
  */
 export function findStructuredTrainingMatch(
@@ -130,27 +130,25 @@ export function findStructuredTrainingMatch(
   const pendingClass = identityClass(`${entry.description} ${pending.subject}`);
   if (pendingClass === "neutral") return null;
 
-  const candidates = history
+  const compatible = history
     .map((item) => {
       const historical = splitKey(item.key);
       if (!historical.direction || historical.direction !== pendingDirection) return null;
       if (!compatibleClass(pendingClass, identityClass(historical.subject))) return null;
-
-      const similarity = structuredSimilarity(pending.subject, historical.subject);
-      if (similarity < 0.6) return null;
-      return { history: item, subject: historical.subject, similarity };
+      if (!belongsToPendingIdentityFamily(pending.subject, historical.subject)) return null;
+      return { history: item, subject: historical.subject, similarity: structuredSimilarity(pending.subject, historical.subject) };
     })
-    .filter((item): item is { history: HistoryLike; subject: string; similarity: number } => Boolean(item))
+    .filter((item): item is { history: HistoryLike; subject: string; similarity: number } => Boolean(item));
+
+  const familyClassifications = new Set(compatible.map(({ history: item }) => classificationKey(item)));
+  if (familyClassifications.size > 1) return null;
+
+  const candidates = compatible
+    .filter((candidate) => candidate.similarity >= 0.6)
     .sort((a, b) => b.similarity - a.similarity);
 
   const best = candidates[0];
   if (!best) return null;
-
-  const sameIdentityFamily = candidates.filter((candidate) =>
-    sharesCoreIdentity(best.subject, candidate.subject),
-  );
-  const classifications = new Set(sameIdentityFamily.map(({ history: item }) => classificationKey(item)));
-  if (classifications.size > 1) return null;
 
   return {
     history: best.history,
