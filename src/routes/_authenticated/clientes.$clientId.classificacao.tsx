@@ -252,8 +252,31 @@ function ClassificationPage() {
             {selected.length} lançamento(s) selecionado(s)
           </p>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full border border-border px-3 py-1">
+              Resultado (DRE): {selectionStats.result}
+            </span>
+            <span className="rounded-full border border-border px-3 py-1">
+              Balanço: {selectionStats.balance}
+            </span>
+            {selectionStats.top.map(([label, count]) => (
+              <span key={label} className="rounded-full border border-border px-3 py-1">
+                {label} · {count}
+              </span>
+            ))}
+          </div>
+
+          {selectionStats.heterogeneous && (
+            <p className="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs text-foreground">
+              A seleção contém classificações diferentes. Confirmar mantém cada classificação atual;
+              reclassificar substituirá todos os selecionados pela nova classificação.
+            </p>
+          )}
+
+          {showForm && (
           <div className="mt-5 grid gap-4 lg:grid-cols-4">
             <div className="space-y-2">
+
               <Label htmlFor="account">Conta gerencial</Label>
               <Input
                 id="account"
