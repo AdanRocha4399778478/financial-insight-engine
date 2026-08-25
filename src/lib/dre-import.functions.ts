@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { fingerprint } from "./classify";
-import { dedupeDreFacts } from "./dre-file";
+import { prepareDreFactBatch } from "./dre-import-batch";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 const factSchema = z.object({
@@ -40,9 +39,9 @@ export const commitDreImport = createServerFn({ method: "POST" })
     if (clientError) throw new Error(clientError.message);
     if (!client) throw new Error("Cliente não encontrado ou sem permissão de acesso.");
 
-    const deduped = dedupeDreFacts(data.facts);
-    if (deduped.conflicts.length) {
-      const detail = deduped.conflicts
+    const prepared = prepareDreFactBatch(data.clientId, data.facts);
+    if (prepared.conflicts.length) {
+      const detail = prepared.conflicts
         .slice(0, 10)
         .map(
           (c) =>
@@ -52,7 +51,7 @@ export const commitDreImport = createServerFn({ method: "POST" })
         )
         .join(" | ");
       throw new Error(
-        `Importação bloqueada: ${deduped.conflicts.length} conta(s)/período(s) com valores divergentes no mesmo arquivo. ${detail}`,
+        `Importação bloqueada: ${prepared.conflicts.length} fingerprint(s) com dados ou valores divergentes no mesmo arquivo. ${detail}`,
       );
     }
 
@@ -71,15 +70,15 @@ export const commitDreImport = createServerFn({ method: "POST" })
       .single();
     if (importError) throw new Error(importError.message);
 
-    const payload: TablesInsert<"dre_facts">[] = deduped.facts.map((f) => ({
-      client_id: data.clientId,
+    const payload: TablesInsert<"dre_facts">[] = prepared.facts.map((f) => ({
+      client_id: f.client_id,
       import_id: importRow.id,
       account_code: f.account_code,
       account_name: f.account_name,
       period: f.period,
       period_label: f.period_label,
       amount: f.amount,
-      fingerprint: fingerprint([data.clientId, f.account_code, f.period]),
+      fingerprint: f.fingerprint,
     }));
 
     for (let i = 0; i < payload.length; i += 400) {
@@ -90,7 +89,7 @@ export const commitDreImport = createServerFn({ method: "POST" })
     }
 
     const accounts = new Map<string, string>();
-    for (const f of deduped.facts) accounts.set(f.account_code, f.account_name);
+    for (const f of prepared.facts) accounts.set(f.account_code, f.account_name);
 
     const { data: existingMaps } = await supabase
       .from("account_mappings")
@@ -123,8 +122,8 @@ export const commitDreImport = createServerFn({ method: "POST" })
       facts: payload.length,
       accounts: accounts.size,
       toMap: newMaps.length,
-      periods: [...new Set(deduped.facts.map((f) => f.period))].length,
-      duplicatesRemoved: deduped.duplicatesRemoved,
+      periods: [...new Set(prepared.facts.map((f) => f.period))].length,
+      duplicatesRemoved: prepared.duplicatesRemoved,
     };
   });
 
