@@ -63,6 +63,7 @@ export const STANDARD_FIELDS = [
   { key: "amount", label: "Valor", required: true },
   { key: "credit", label: "Crédito", required: false },
   { key: "debit", label: "Débito", required: false },
+  { key: "balance", label: "Saldo", required: false },
   { key: "original_category", label: "Categoria original", required: false },
   { key: "cost_center", label: "Centro de custo", required: false },
   { key: "document", label: "Documento", required: false },
@@ -167,18 +168,6 @@ export function buildDre(rows: DreRow[]): DreResult {
         if (row.behavior === "variavel") r.despesasVariaveis += v;
         else if (row.behavior === "fixo") r.despesasFixas += v;
         else r.despesasMistas += v;
-        break;
-      case "receita_financeira":
-        r.receitasFinanceiras += v;
-        break;
-      case "despesa_financeira":
-        r.despesasFinanceiras += v;
-        break;
-      case "outra_receita":
-        r.outrasReceitas += v;
-        break;
-      case "outra_despesa":
-        r.outrasDespesas += v;
         break;
     }
   }
