@@ -221,16 +221,66 @@ function TrainingPage() {
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h3 className="font-medium">Cobertura estimada sobre pendências atuais</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Simulação sem gravar conhecimento e sem alterar lançamentos.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Simulação sem gravar conhecimento e sem alterar lançamentos. Matches estruturados são apenas candidatos a sugestão.</p>
                 </div>
-                <div className="font-display text-3xl font-semibold">{coverage.estimatedCoveragePct}%</div>
+                <div className="text-right">
+                  <div className="font-display text-3xl font-semibold">{coverage.combinedCoveragePct}%</div>
+                  <div className="text-xs text-muted-foreground">potencial combinado</div>
+                </div>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <Metric label="Pendências atuais" value={coverage.totalPending} />
-                <Metric label="Matches seguros" value={coverage.safeMatches} />
-                <Metric label="Matches conflitantes" value={coverage.conflictMatches} />
+                <Metric label="Matches exatos" value={coverage.safeMatches} />
+                <Metric label="Matches estruturados" value={coverage.structuredMatches} />
+                <Metric label="Conflitantes" value={coverage.conflictMatches} />
                 <Metric label="Sem cobertura" value={coverage.uncovered} />
               </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <Metric label="Cobertura exata" value={`${coverage.exactCoveragePct}%`} />
+                <Metric label="Cobertura estruturada potencial" value={`${coverage.structuredCoveragePct}%`} />
+                <Metric label="Cobertura combinada potencial" value={`${coverage.combinedCoveragePct}%`} />
+              </div>
+
+              {coverage.structuredSuggestions.length > 0 && (
+                <div className="mt-5">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-medium">Candidatos de matching estruturado</h4>
+                      <p className="text-xs text-muted-foreground">Diagnóstico de Nível 2. Estes itens ainda não classificam nem alteram lançamentos.</p>
+                    </div>
+                    <Badge variant="secondary">{coverage.structuredMatches} ocorrência(s)</Badge>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-border bg-card">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-muted/50 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">Pendência</th>
+                          <th className="px-4 py-3">Origem</th>
+                          <th className="px-4 py-3">Histórico candidato</th>
+                          <th className="px-4 py-3">Conta sugerida</th>
+                          <th className="px-4 py-3">Confiança</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {coverage.structuredSuggestions.map((item) => (
+                          <tr key={item.pendingKey}>
+                            <td className="max-w-xs px-4 py-3 font-mono text-xs"><p className="break-words">{item.pendingKey}</p></td>
+                            <td className="max-w-sm px-4 py-3 text-xs">
+                              <p className="break-words">{item.pendingDescription}</p>
+                              <p className="mt-1 text-muted-foreground">Contraparte: {item.pendingCounterparty ?? "—"}</p>
+                            </td>
+                            <td className="max-w-xs px-4 py-3 font-mono text-xs text-muted-foreground"><p className="break-words">{item.candidateKey}</p></td>
+                            <td className="px-4 py-3">{item.candidateAccount}</td>
+                            <td className="px-4 py-3"><Badge variant="outline">{Math.round(item.confidence * 100)}%</Badge></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {coverage.mismatchDiagnostics.length > 0 && (
                 <div className="mt-5 overflow-x-auto rounded-lg border border-border bg-card">
