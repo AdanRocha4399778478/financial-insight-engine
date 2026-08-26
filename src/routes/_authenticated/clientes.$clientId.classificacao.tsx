@@ -13,6 +13,7 @@ import {
 } from "@/lib/entries.functions";
 import { classifyBalanceEntries } from "@/lib/balance-classification.functions";
 import { confirmCurrentClassifications } from "@/lib/confirm-current-classifications.functions";
+import { rejectSuggestions } from "@/lib/reject-suggestions.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
 import { diagnoseTrainingMatchGaps } from "@/lib/training-match-diagnostics.functions";
@@ -105,6 +106,7 @@ function ClassificationPage() {
   const applyBalanceClassification = useServerFn(classifyBalanceEntries);
   const confirmCurrent = useServerFn(confirmCurrentClassifications);
   const confirm = useServerFn(confirmSuggestions);
+  const reject = useServerFn(rejectSuggestions);
   const ignore = useServerFn(ignoreEntries);
   const askAI = useServerFn(suggestWithAI);
   const reprocessLearning = useServerFn(reclassifyPendingFromLearning);
@@ -206,7 +208,9 @@ function ClassificationPage() {
   }, [rows, status]);
 
   const isAutomaticFilter = status === "auto";
-  const showClassificationForm = status !== "sugerido" && (!isAutomaticFilter || reclassifyMode);
+  const isSuggestedFilter = status === "sugerido";
+  const showClassificationForm =
+    (!isAutomaticFilter && !isSuggestedFilter) || reclassifyMode;
 
   const clearParetoFilter = () => {
     setParetoEntryIds(null);
@@ -295,6 +299,19 @@ function ClassificationPage() {
     onSuccess: (result) => {
       if (result.updated > 0) toast.success(`${result.updated} sugestão(ões) confirmada(s).`);
       else toast.info("Nenhuma sugestão elegível para confirmar.");
+      refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const rejectSelectedSuggestions = useMutation({
+    mutationFn: () => reject({ data: { clientId, entryIds: selected } }),
+    onSuccess: (result) => {
+      if (result.updated > 0) {
+        toast.success(`${result.updated} sugestão(ões) rejeitada(s) e devolvida(s) para pendências.`);
+      } else {
+        toast.info("Nenhuma sugestão elegível para rejeitar.");
+      }
       refresh();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -628,7 +645,7 @@ function ClassificationPage() {
                 {selectedRows.length > 1 && (
                   <p className="text-xs text-muted-foreground">+ {selectedRows.length - 1} lançamento(s) na seleção · impacto absoluto {brl(selectionStats.totalAmount)}</p>
                 )}
-                {isAutomaticFilter && (
+                {(isAutomaticFilter || isSuggestedFilter) && (
                   <>
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <Badge variant="outline">Resultado (DRE): {selectionStats.resultado}</Badge>
@@ -637,7 +654,7 @@ function ClassificationPage() {
                     </div>
                     {selectionStats.heterogeneous && (
                       <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs text-muted-foreground">
-                        A seleção contém classificações diferentes. Confirmar mantém cada classificação atual; reclassificar substitui todos pela nova classificação.
+                        A seleção contém classificações diferentes. Aceitar mantém cada sugestão atual; reclassificar substitui todos pela nova classificação.
                       </p>
                     )}
                   </>
@@ -712,7 +729,7 @@ function ClassificationPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">A classificação atual já está pronta. Confirme ou escolha reclassificar.</p>
+                  <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">A classificação atual já está pronta. Aceite, reclassifique ou rejeite a sugestão.</p>
                 )}
               </div>
             </div>
@@ -733,6 +750,19 @@ function ClassificationPage() {
                 <Button variant="secondary" onClick={() => setReclassifyMode(true)}>Reclassificar</Button>
               </>
             )}
+            {isSuggestedFilter && !reclassifyMode && (
+              <>
+                <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>{bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}</Button>
+                <Button variant="secondary" onClick={() => setReclassifyMode(true)}>Reclassificar</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => rejectSelectedSuggestions.mutate()}
+                  disabled={rejectSelectedSuggestions.isPending}
+                >
+                  {rejectSelectedSuggestions.isPending ? "Rejeitando..." : `Rejeitar ${selected.length} sugestão(ões)`}
+                </Button>
+              </>
+            )}
             {showClassificationForm && statementType === "resultado" && (
               <Button
                 onClick={() => {
@@ -744,7 +774,7 @@ function ClassificationPage() {
                 }}
                 disabled={classify.isPending}
               >
-                {isAutomaticFilter ? "Aplicar nova classificação" : "Confirmar classificação"}
+                {isAutomaticFilter || isSuggestedFilter ? "Aplicar nova classificação" : "Confirmar classificação"}
               </Button>
             )}
             {showClassificationForm && statementType === "balanco" && (
@@ -761,14 +791,13 @@ function ClassificationPage() {
                 {classifyBalance.isPending ? "Confirmando..." : "Confirmar no Balanço"}
               </Button>
             )}
-            {status === "sugerido" && <Button onClick={() => bulkConfirm.mutate()} disabled={bulkConfirm.isPending}>{bulkConfirm.isPending ? "Confirmando..." : `Aceitar ${selected.length} sugestão(ões)`}</Button>}
             {showClassificationForm && statementType === "resultado" && (
               <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 {ai.isPending ? "Consultando IA..." : "Sugerir com IA"}
               </Button>
             )}
-            {isAutomaticFilter && reclassifyMode && <Button variant="ghost" onClick={() => setReclassifyMode(false)}>Cancelar reclassificação</Button>}
+            {(isAutomaticFilter || isSuggestedFilter) && reclassifyMode && <Button variant="ghost" onClick={() => setReclassifyMode(false)}>Cancelar reclassificação</Button>}
             <Button variant="ghost" onClick={() => bulkIgnore.mutate()} disabled={bulkIgnore.isPending}>Ignorar da DRE</Button>
             <Button variant="ghost" onClick={() => { setSelected([]); setReclassifyMode(false); }}>Limpar seleção</Button>
           </div>
