@@ -238,9 +238,15 @@ function ImportPage() {
       });
     },
     onSuccess: (result) => {
-      toast.success(
-        `${result.inserted} lançamentos importados · ${result.auto} automáticos · ${result.pending} pendentes`,
-      );
+      if (result.inserted === 0 && result.duplicates > 0) {
+        toast.info(
+          `Nenhum novo lançamento importado · ${result.duplicates} já existiam na base`,
+        );
+      } else {
+        toast.success(
+          `${result.inserted} lançamentos importados · ${result.auto} automáticos · ${result.pending} pendentes`,
+        );
+      }
       queryClient.invalidateQueries();
       navigate({ to: "/clientes/$clientId/classificacao", params: { clientId } });
     },
@@ -436,18 +442,18 @@ function ImportPage() {
                   ? reused
                     ? "Layout conhecido e reaproveitado."
                     : "Campos essenciais identificados."
-                  : "Revise os campos obrigat?rios antes de continuar."}
+                  : "Revise os campos obrigatórios antes de continuar."}
               </p>
             </div>
 
             <Badge variant={hasRequired ? "default" : "destructive"}>
-              {hasRequired ? "Mapeamento pronto ? Revisar" : "Revis?o necess?ria"}
+              {hasRequired ? "Mapeamento pronto · Revisar" : "Revisão necessária"}
             </Badge>
           </summary>
 
           <div className="mt-5">
             <p className="text-sm text-muted-foreground">
-              Associe as colunas do arquivo aos campos do sistema. Data, descri??o e valor s?o obrigat?rios.
+              Associe as colunas do arquivo aos campos do sistema. Data, descrição e valor são obrigatórios.
             </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {STANDARD_FIELDS.map((field) => (
@@ -722,7 +728,7 @@ function ImportPage() {
                       {balanceIntegrity.status === "conciliado"
                         ? "Os saldos independentes fecham com as movimenta\u00e7\u00f5es dentro da toler\u00e2ncia de R$ 0,01."
                         : balanceIntegrity.status === "divergente"
-                          ? "Os saldos independentes n?o fecham com as movimenta??es. Revise mapeamento, per?odo, sinais e linhas descartadas."
+                          ? "Os saldos independentes n\u00e3o fecham com as movimenta\u00e7\u00f5es. Revise mapeamento, per\u00edodo, sinais e linhas descartadas."
                           : balanceIntegrity.status === "fechamento_inferido"
                             ? "O fechamento matem\u00e1tico foi obtido, mas pelo menos um dos saldos foi inferido. Isso n\u00e3o substitui uma concilia\u00e7\u00e3o banc\u00e1ria com duas evid\u00eancias independentes."
                             : "N\u00e3o h\u00e1 evid\u00eancia suficiente para determinar os dois saldos com seguran\u00e7a. Informe os saldos manualmente ou utilize um extrato com saldos identific\u00e1veis para realizar a confer\u00eancia."}
