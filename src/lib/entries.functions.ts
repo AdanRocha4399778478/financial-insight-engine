@@ -202,6 +202,8 @@ export const classifyEntries = createServerFn({ method: "POST" })
         nature: data.values.nature as never,
         behavior: data.values.behavior as never,
         area: data.values.area,
+        statement_type: "resultado",
+        balance_group: null,
         status: "confirmado",
         confidence: 1,
         classification_source: "confirmacao_humana",

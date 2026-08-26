@@ -196,7 +196,7 @@ function DrePage() {
   }, [dre.data]);
 
   const hasData = (dre.data?.rows.length ?? 0) > 0;
-  const latestImport = imports.data?.[0];
+  const latestImport = imports.data?.find((imp) => imp.valid_rows > 0);
   const hasDataOutsideRange = Boolean(
     !hasData &&
       dataRange.data &&
