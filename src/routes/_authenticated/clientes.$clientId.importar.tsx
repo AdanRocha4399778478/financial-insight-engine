@@ -533,7 +533,7 @@ function ImportPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Lan?amentos v?lidos
+                    {"Lan\u00e7amentos v\u00e1lidos"}
                   </p>
                   <p className="mt-1 text-xl font-semibold">
                     {normalized.summary.valid}
@@ -551,7 +551,7 @@ function ImportPage() {
 
                 <div className="rounded-lg border border-border p-4">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Sa?das
+                    {"Sa\u00eddas"}
                   </p>
                   <p className="mt-1 text-xl font-semibold">
                     {brl(normalized.summary.debitTotal)}
@@ -571,7 +571,7 @@ function ImportPage() {
                     <div className="flex flex-wrap items-center justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-medium">Integridade da importa??o</h3>
+                          <h3 className="font-medium">{"Integridade da importa\u00e7\u00e3o"}</h3>
 
                           <Badge
                             variant={
@@ -588,12 +588,12 @@ function ImportPage() {
                                 ? "DIVERGENTE"
                                 : balanceIntegrity.status === "fechamento_inferido"
                                   ? "FECHAMENTO INFERIDO"
-                                  : "N?O VERIFICADO"}
+                                  : "N\u00c3O VERIFICADO"}
                           </Badge>
                         </div>
 
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Confer?ncia matem?tica da base antes da importa??o.
+                          {"Confer\u00eancia matem\u00e1tica da base antes da importa\u00e7\u00e3o."}
                         </p>
                       </div>
 
@@ -604,18 +604,18 @@ function ImportPage() {
                           </p>
                           <p className="mt-1 text-sm font-semibold">
                             {balanceIntegrity.calculatedBalance === null
-                              ? "?"
+                              ? "\u2014"
                               : brl(balanceIntegrity.calculatedBalance)}
                           </p>
                         </div>
 
                         <div>
                           <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                            Diferen?a
+                            {"Diferen\u00e7a"}
                           </p>
                           <p className="mt-1 text-sm font-semibold">
                             {balanceIntegrity.difference === null
-                              ? "?"
+                              ? "\u2014"
                               : brl(balanceIntegrity.difference)}
                           </p>
                         </div>
@@ -653,7 +653,7 @@ function ImportPage() {
                         <p className="text-xs text-muted-foreground">Saldo inicial</p>
                         <p className="mt-1 font-medium">
                           {balanceIntegrity.openingBalance === null
-                            ? "?"
+                            ? "\u2014"
                             : brl(balanceIntegrity.openingBalance)}
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -672,7 +672,7 @@ function ImportPage() {
                       </div>
 
                       <div className="rounded-md bg-muted/40 p-3">
-                        <p className="text-xs text-muted-foreground">Sa?das</p>
+                        <p className="text-xs text-muted-foreground">{"Sa\u00eddas"}</p>
                         <p className="mt-1 font-medium">
                           {brl(normalized.summary.debitTotal)}
                         </p>
@@ -685,11 +685,11 @@ function ImportPage() {
                         <p className="text-xs text-muted-foreground">Saldo calculado</p>
                         <p className="mt-1 font-medium">
                           {balanceIntegrity.calculatedBalance === null
-                            ? "?"
+                            ? "\u2014"
                             : brl(balanceIntegrity.calculatedBalance)}
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          C?lculo da importa??o
+                          {"C\u00e1lculo da importa\u00e7\u00e3o"}
                         </p>
                       </div>
 
@@ -697,7 +697,7 @@ function ImportPage() {
                         <p className="text-xs text-muted-foreground">Saldo final</p>
                         <p className="mt-1 font-medium">
                           {balanceIntegrity.closingBalance === null
-                            ? "?"
+                            ? "\u2014"
                             : brl(balanceIntegrity.closingBalance)}
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -706,10 +706,10 @@ function ImportPage() {
                       </div>
 
                       <div className="rounded-md bg-muted/40 p-3">
-                        <p className="text-xs text-muted-foreground">Diferen?a</p>
+                        <p className="text-xs text-muted-foreground">{"Diferen\u00e7a"}</p>
                         <p className="mt-1 font-medium">
                           {balanceIntegrity.difference === null
-                            ? "?"
+                            ? "\u2014"
                             : brl(balanceIntegrity.difference)}
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -720,12 +720,12 @@ function ImportPage() {
 
                     <p className="mt-4 text-xs text-muted-foreground">
                       {balanceIntegrity.status === "conciliado"
-                        ? "Os saldos independentes fecham com as movimenta??es dentro da toler?ncia de R$ 0,01."
+                        ? "Os saldos independentes fecham com as movimenta\u00e7\u00f5es dentro da toler\u00e2ncia de R$ 0,01."
                         : balanceIntegrity.status === "divergente"
                           ? "Os saldos independentes n?o fecham com as movimenta??es. Revise mapeamento, per?odo, sinais e linhas descartadas."
                           : balanceIntegrity.status === "fechamento_inferido"
-                            ? "O fechamento matem?tico foi obtido, mas pelo menos um dos saldos foi inferido. Isso n?o substitui uma concilia??o banc?ria com duas evid?ncias independentes."
-                            : "N?o h? evid?ncia suficiente para determinar os dois saldos com seguran?a. Informe os saldos manualmente ou utilize um extrato com saldos identific?veis para realizar a confer?ncia."}
+                            ? "O fechamento matem\u00e1tico foi obtido, mas pelo menos um dos saldos foi inferido. Isso n\u00e3o substitui uma concilia\u00e7\u00e3o banc\u00e1ria com duas evid\u00eancias independentes."
+                            : "N\u00e3o h\u00e1 evid\u00eancia suficiente para determinar os dois saldos com seguran\u00e7a. Informe os saldos manualmente ou utilize um extrato com saldos identific\u00e1veis para realizar a confer\u00eancia."}
                     </p>
                   </div>
                 </details>
