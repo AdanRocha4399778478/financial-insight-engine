@@ -335,64 +335,91 @@ function ImportPage() {
       </section>
 
       {parsed && (
-        <section className="rounded-lg border border-border bg-card p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">2. Linha de cabeçalho</h2>
+        <details
+          open={!parsed.confident}
+          className="rounded-lg border border-border bg-card p-5"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-lg font-semibold">2. Cabeçalho</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {parsed.confident
+                  ? `Linha ${parsed.headerRow + 1} detectada automaticamente.`
+                  : "Selecione manualmente a linha correta."}
+              </p>
+            </div>
+
             <Badge variant={parsed.confident ? "default" : "destructive"}>
               {parsed.confident
-                ? `Detectada automaticamente (linha ${parsed.headerRow + 1})`
-                : "Selecione manualmente a linha de cabeçalho"}
+                ? "Cabeçalho pronto · Revisar"
+                : "Revisão necessária"}
             </Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Linhas acima do cabeçalho são tratadas como metadados do arquivo e não são importadas.
-          </p>
-          <div className="mt-6 space-y-2">
-            {parsed.matrix.slice(0, 12).map((line, index) => (
-              <button
-                key={index}
-                type="button"
-                onClick={() => void chooseHeaderRow(index)}
-                className={`flex w-full items-center gap-3 overflow-hidden rounded-lg border px-4 py-2 text-left text-xs transition-colors ${
-                  index === parsed.headerRow
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:border-primary"
-                }`}
-              >
-                <span className="font-mono text-muted-foreground">L{index + 1}</span>
-                <span className="truncate">
-                  {line.map((c) => (c === null || c === undefined ? "" : String(c))).join(" · ") ||
-                    "(linha vazia)"}
-                </span>
-              </button>
-            ))}
-          </div>
+          </summary>
 
-          <div className="mt-6 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 font-mono uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  {parsed.columns.map((col) => (
-                    <th key={col} className="px-3 py-2">
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {parsed.rows.slice(0, 3).map((row, index) => (
-                  <tr key={index}>
+          <div className="mt-5">
+            <p className="text-sm text-muted-foreground">
+              Linhas acima do cabeçalho são tratadas como metadados e não são importadas.
+            </p>
+
+            <div className="mt-4 space-y-2">
+              {parsed.matrix.slice(0, 12).map((line, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => void chooseHeaderRow(index)}
+                  className={`flex w-full items-center gap-3 overflow-hidden rounded-lg border px-4 py-2 text-left text-xs transition-colors ${
+                    index === parsed.headerRow
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary"
+                  }`}
+                >
+                  <span className="font-mono text-muted-foreground">
+                    L{index + 1}
+                  </span>
+
+                  <span className="truncate">
+                    {line
+                      .map((c) =>
+                        c === null || c === undefined ? "" : String(c),
+                      )
+                      .join(" · ") || "(linha vazia)"}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-muted/50 font-mono uppercase tracking-wider text-muted-foreground">
+                  <tr>
                     {parsed.columns.map((col) => (
-                      <td key={col} className="max-w-[14rem] truncate px-3 py-2">
-                        {row[col] === null || row[col] === undefined ? "—" : String(row[col])}
-                      </td>
+                      <th key={col} className="px-3 py-2">
+                        {col}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-border">
+                  {parsed.rows.slice(0, 3).map((row, index) => (
+                    <tr key={index}>
+                      {parsed.columns.map((col) => (
+                        <td
+                          key={col}
+                          className="max-w-[14rem] truncate px-3 py-2"
+                        >
+                          {row[col] === null || row[col] === undefined
+                            ? "—"
+                            : String(row[col])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </section>
+        </details>
       )}
 
       {parsed && mode === "movimentos" && (
