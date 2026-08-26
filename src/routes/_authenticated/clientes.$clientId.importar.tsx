@@ -530,115 +530,205 @@ function ImportPage() {
         <section className="rounded-lg border border-border bg-card p-8">
           {normalized && (
             <div className="mt-6 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Linhas lidas</p>
-                  <p className="mt-1 text-xl font-semibold">{normalized.summary.read}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Lan?amentos v?lidos
+                  </p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {normalized.summary.valid}
+                  </p>
                 </div>
+
                 <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Lançamentos válidos</p>
-                  <p className="mt-1 text-xl font-semibold">{normalized.summary.valid}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Entradas
+                  </p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {brl(normalized.summary.creditTotal)}
+                  </p>
                 </div>
+
                 <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Entradas</p>
-                  <p className="mt-1 text-xl font-semibold">{brl(normalized.summary.creditTotal)}</p>
-                </div>
-                <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Saídas</p>
-                  <p className="mt-1 text-xl font-semibold">{brl(normalized.summary.debitTotal)}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Sa?das
+                  </p>
+                  <p className="mt-1 text-xl font-semibold">
+                    {brl(normalized.summary.debitTotal)}
+                  </p>
                 </div>
               </div>
 
               {balanceIntegrity && (
-                <div className="rounded-lg border border-border p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-medium">Integridade da importação</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Conferência matemática entre saldo inicial, movimentações e saldo final.
-                      </p>
+                <details
+                  open={
+                    balanceIntegrity.status !== "conciliado" &&
+                    balanceIntegrity.status !== "fechamento_inferido"
+                  }
+                  className="rounded-lg border border-border p-5"
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-medium">Integridade da importa??o</h3>
+
+                          <Badge
+                            variant={
+                              balanceIntegrity.status === "conciliado"
+                                ? "default"
+                                : balanceIntegrity.status === "divergente"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {balanceIntegrity.status === "conciliado"
+                              ? "CONCILIADO"
+                              : balanceIntegrity.status === "divergente"
+                                ? "DIVERGENTE"
+                                : balanceIntegrity.status === "fechamento_inferido"
+                                  ? "FECHAMENTO INFERIDO"
+                                  : "N?O VERIFICADO"}
+                          </Badge>
+                        </div>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Confer?ncia matem?tica da base antes da importa??o.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-6">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                            Saldo calculado
+                          </p>
+                          <p className="mt-1 text-sm font-semibold">
+                            {balanceIntegrity.calculatedBalance === null
+                              ? "?"
+                              : brl(balanceIntegrity.calculatedBalance)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                            Diferen?a
+                          </p>
+                          <p className="mt-1 text-sm font-semibold">
+                            {balanceIntegrity.difference === null
+                              ? "?"
+                              : brl(balanceIntegrity.difference)}
+                          </p>
+                        </div>
+
+                        <span className="text-xs font-medium text-primary">
+                          Conferir saldos
+                        </span>
+                      </div>
                     </div>
-                    <Badge
-                      variant={
-                        balanceIntegrity.status === "conciliado"
-                          ? "default"
-                          : balanceIntegrity.status === "divergente"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
+                  </summary>
+
+                  <div className="mt-5 border-t border-border pt-5">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Saldo inicial informado (opcional)</Label>
+                        <Input
+                          placeholder="Ex.: 1.234,56"
+                          value={manualOpeningBalance}
+                          onChange={(e) => setManualOpeningBalance(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Saldo final informado (opcional)</Label>
+                        <Input
+                          placeholder="Ex.: 2.345,67"
+                          value={manualClosingBalance}
+                          onChange={(e) => setManualClosingBalance(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Saldo inicial</p>
+                        <p className="mt-1 font-medium">
+                          {balanceIntegrity.openingBalance === null
+                            ? "?"
+                            : brl(balanceIntegrity.openingBalance)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {openingSourceLabel}
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Entradas</p>
+                        <p className="mt-1 font-medium">
+                          {brl(normalized.summary.creditTotal)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Movimentos normalizados
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Sa?das</p>
+                        <p className="mt-1 font-medium">
+                          {brl(normalized.summary.debitTotal)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Movimentos normalizados
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Saldo calculado</p>
+                        <p className="mt-1 font-medium">
+                          {balanceIntegrity.calculatedBalance === null
+                            ? "?"
+                            : brl(balanceIntegrity.calculatedBalance)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          C?lculo da importa??o
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Saldo final</p>
+                        <p className="mt-1 font-medium">
+                          {balanceIntegrity.closingBalance === null
+                            ? "?"
+                            : brl(balanceIntegrity.closingBalance)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {closingSourceLabel}
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Diferen?a</p>
+                        <p className="mt-1 font-medium">
+                          {balanceIntegrity.difference === null
+                            ? "?"
+                            : brl(balanceIntegrity.difference)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Banco menos calculado
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-4 text-xs text-muted-foreground">
                       {balanceIntegrity.status === "conciliado"
-                        ? "CONCILIADO"
+                        ? "Os saldos independentes fecham com as movimenta??es dentro da toler?ncia de R$ 0,01."
                         : balanceIntegrity.status === "divergente"
-                          ? "DIVERGENTE"
+                          ? "Os saldos independentes n?o fecham com as movimenta??es. Revise mapeamento, per?odo, sinais e linhas descartadas."
                           : balanceIntegrity.status === "fechamento_inferido"
-                            ? "FECHAMENTO INFERIDO"
-                            : "NÃO VERIFICADO"}
-                    </Badge>
+                            ? "O fechamento matem?tico foi obtido, mas pelo menos um dos saldos foi inferido. Isso n?o substitui uma concilia??o banc?ria com duas evid?ncias independentes."
+                            : "N?o h? evid?ncia suficiente para determinar os dois saldos com seguran?a. Informe os saldos manualmente ou utilize um extrato com saldos identific?veis para realizar a confer?ncia."}
+                    </p>
                   </div>
-
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Saldo inicial informado (opcional)</Label>
-                      <Input
-                        placeholder="Ex.: 1.234,56"
-                        value={manualOpeningBalance}
-                        onChange={(e) => setManualOpeningBalance(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Saldo final informado (opcional)</Label>
-                      <Input
-                        placeholder="Ex.: 2.345,67"
-                        value={manualClosingBalance}
-                        onChange={(e) => setManualClosingBalance(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Saldo inicial</p>
-                      <p className="mt-1 font-medium">{balanceIntegrity.openingBalance === null ? "—" : brl(balanceIntegrity.openingBalance)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">{openingSourceLabel}</p>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Entradas</p>
-                      <p className="mt-1 font-medium">{brl(normalized.summary.creditTotal)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Movimentos normalizados</p>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Saídas</p>
-                      <p className="mt-1 font-medium">{brl(normalized.summary.debitTotal)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Movimentos normalizados</p>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Saldo calculado</p>
-                      <p className="mt-1 font-medium">{balanceIntegrity.calculatedBalance === null ? "—" : brl(balanceIntegrity.calculatedBalance)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Cálculo da importação</p>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Saldo final</p>
-                      <p className="mt-1 font-medium">{balanceIntegrity.closingBalance === null ? "—" : brl(balanceIntegrity.closingBalance)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">{closingSourceLabel}</p>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-3">
-                      <p className="text-xs text-muted-foreground">Diferença</p>
-                      <p className="mt-1 font-medium">{balanceIntegrity.difference === null ? "—" : brl(balanceIntegrity.difference)}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Banco menos calculado</p>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 text-xs text-muted-foreground">
-                    {balanceIntegrity.status === "conciliado"
-                      ? "Os saldos independentes fecham com as movimentações dentro da tolerância de R$ 0,01."
-                      : balanceIntegrity.status === "divergente"
-                        ? "Os saldos independentes não fecham com as movimentações. Revise mapeamento, período, sinais e linhas descartadas."
-                        : balanceIntegrity.status === "fechamento_inferido"
-                          ? "O fechamento matemático foi obtido, mas pelo menos um dos saldos foi inferido. Isso não substitui uma conciliação bancária com duas evidências independentes."
-                          : "Não há evidência suficiente para determinar os dois saldos com segurança. Informe os saldos manualmente ou utilize um extrato com saldos identificáveis para realizar a conferência."}
-                  </p>
-                </div>
+                </details>
               )}
 
               <div className="flex justify-end">
