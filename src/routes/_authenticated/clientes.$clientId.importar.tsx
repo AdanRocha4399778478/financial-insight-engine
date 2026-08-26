@@ -423,14 +423,32 @@ function ImportPage() {
       )}
 
       {parsed && mode === "movimentos" && (
-        <section className="rounded-lg border border-border bg-card p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-lg font-semibold">3. Mapeamento de colunas</h2>
-            {reused && <Badge variant="secondary">Mapeamento reaproveitado deste layout</Badge>}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Associe as colunas do arquivo aos campos do sistema. Data, descrição e valor são obrigatórios.
-          </p>
+        <>
+        <details
+          open={!hasRequired}
+          className="rounded-lg border border-border bg-card p-5"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-lg font-semibold">3. Mapeamento de colunas</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {hasRequired
+                  ? reused
+                    ? "Layout conhecido e reaproveitado."
+                    : "Campos essenciais identificados."
+                  : "Revise os campos obrigat?rios antes de continuar."}
+              </p>
+            </div>
+
+            <Badge variant={hasRequired ? "default" : "destructive"}>
+              {hasRequired ? "Mapeamento pronto ? Revisar" : "Revis?o necess?ria"}
+            </Badge>
+          </summary>
+
+          <div className="mt-5">
+            <p className="text-sm text-muted-foreground">
+              Associe as colunas do arquivo aos campos do sistema. Data, descri??o e valor s?o obrigat?rios.
+            </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {STANDARD_FIELDS.map((field) => (
               <div key={field.key} className="space-y-2">
@@ -506,6 +524,10 @@ function ImportPage() {
             </table>
           </div>
 
+          </div>
+        </details>
+
+        <section className="rounded-lg border border-border bg-card p-8">
           {normalized && (
             <div className="mt-6 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -630,6 +652,7 @@ function ImportPage() {
             </div>
           )}
         </section>
+        </>
       )}
 
       {parsed && mode === "dre" && (
