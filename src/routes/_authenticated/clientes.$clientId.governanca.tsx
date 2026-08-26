@@ -63,6 +63,7 @@ function GovernancePage() {
   const queryClient = useQueryClient();
   const [rulesExpanded, setRulesExpanded] = useState(false);
   const [auditExpanded, setAuditExpanded] = useState(false);
+  const [technicalExpanded, setTechnicalExpanded] = useState(false);
 
   const fetchRules = useServerFn(listRules);
   const toggleRule = useServerFn(setRuleActive);
@@ -99,9 +100,10 @@ function GovernancePage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: (importId: string) => removeImport({ data: { importId } }),
-    onSuccess: () => {
-      toast.success("Importação e lançamentos removidos.");
+    mutationFn: (input: { importId: string; technical: boolean }) =>
+      removeImport({ data: { importId: input.importId } }),
+    onSuccess: (_result, input) => {
+      toast.success(input.technical ? "Registro técnico removido." : "Importação e lançamentos removidos.");
       queryClient.invalidateQueries();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -120,15 +122,21 @@ function GovernancePage() {
   const inactiveRules = totalRules - activeRules;
   const auditRows = audit.data ?? [];
   const visibleAuditRows = auditExpanded ? auditRows.slice(0, 50) : auditRows.slice(0, 5);
+  const importRows = imports.data ?? [];
+  const operationalImports = importRows.filter((imp) => imp.valid_rows > 0);
+  const technicalImports = importRows.filter((imp) => imp.valid_rows === 0);
 
   return (
     <div className="space-y-10">
       <section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg font-semibold">Importações e integridade</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-lg font-semibold">Bases financeiras importadas</h2>
+              {operationalImports.length > 0 && <Badge variant="outline">{operationalImports.length} bases</Badge>}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Qualidade matemática de cada base importada antes de usá-la como referência financeira.
+              Importações que realmente alteraram a base financeira do cliente e sua qualidade matemática.
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -137,7 +145,7 @@ function GovernancePage() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {imports.data?.map((imp) => (
+          {operationalImports.map((imp) => (
             <div key={imp.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -156,7 +164,7 @@ function GovernancePage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => importMutation.mutate(imp.id)}
+                  onClick={() => importMutation.mutate({ importId: imp.id, technical: false })}
                   disabled={importMutation.isPending}
                 >
                   Desfazer importação
@@ -222,12 +230,57 @@ function GovernancePage() {
               )}
             </div>
           ))}
-          {imports.data?.length === 0 && (
+          {operationalImports.length === 0 && (
             <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-              Nenhuma importação registrada.
+              Nenhuma base financeira foi adicionada ainda.
             </p>
           )}
         </div>
+
+        {technicalImports.length > 0 && (
+          <div className="mt-4 rounded-lg border border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium">Histórico técnico</p>
+                  <Badge variant="outline">
+                    {technicalImports.length} {technicalImports.length === 1 ? "tentativa sem alteração" : "tentativas sem alteração"}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tentativas que não adicionaram novos lançamentos permanecem disponíveis apenas para auditoria.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setTechnicalExpanded((value) => !value)}>
+                {technicalExpanded ? "Recolher histórico" : "Ver histórico"}
+              </Button>
+            </div>
+
+            {technicalExpanded && (
+              <div className="divide-y divide-border border-t border-border">
+                {technicalImports.map((imp) => (
+                  <div key={imp.id} className="flex flex-wrap items-center justify-between gap-4 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{imp.filename}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(imp.created_at).toLocaleString("pt-BR")} · 0 novos
+                        {imp.duplicate_rows > 0 ? ` · ${imp.duplicate_rows} já existiam na base` : " · nenhuma alteração na base"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => importMutation.mutate({ importId: imp.id, technical: true })}
+                      disabled={importMutation.isPending}
+                    >
+                      Remover registro
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section>
