@@ -9,7 +9,7 @@ const periodSchema = z.object({
   dimension: z.string().max(120).nullable(),
 });
 
-/** Somente base validada de Resultado entra na DRE; Balanço e pendentes ficam de fora. */
+/** Somente movimentações classificadas de Resultado entram na DRE Gerencial de Caixa; Balanço e pendentes ficam de fora. */
 export const getDreData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => periodSchema.parse(input))
@@ -30,12 +30,26 @@ export const getDreData = createServerFn({ method: "GET" })
 
     const { data: pendingRows } = await context.supabase
       .from("entries")
-      .select("id")
+      .select("id, amount")
       .eq("client_id", data.clientId)
       .eq("status", "pendente")
       .gte("entry_date", data.from)
       .lte("entry_date", data.to)
       .limit(50000);
+
+    const pendingList = pendingRows ?? [];
+    const pendingEntries = pendingList.filter((row) => Number(row.amount) > 0);
+    const pendingExits = pendingList.filter((row) => Number(row.amount) < 0);
+
+    const pendingEntryTotal = pendingEntries.reduce(
+      (sum, row) => sum + Number(row.amount),
+      0,
+    );
+
+    const pendingExitTotal = pendingExits.reduce(
+      (sum, row) => sum + Math.abs(Number(row.amount)),
+      0,
+    );
 
     const { data: dimensionRows } = await context.supabase
       .from("entries")
@@ -90,7 +104,11 @@ export const getDreData = createServerFn({ method: "GET" })
     return {
       rows: [...(rows ?? []), ...factRows],
       unmappedAccounts,
-      pendingCount: pendingRows?.length ?? 0,
+      pendingCount: pendingList.length,
+      pendingEntryCount: pendingEntries.length,
+      pendingEntryTotal,
+      pendingExitCount: pendingExits.length,
+      pendingExitTotal,
       dimensions: [...new Set((dimensionRows ?? []).map((d) => d.cost_center!).filter(Boolean))].sort(),
     };
   });

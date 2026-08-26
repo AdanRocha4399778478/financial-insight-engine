@@ -264,7 +264,24 @@ function DrePage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-border bg-card p-5">
+       <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="font-display text-xl font-semibold">
+          DRE Gerencial de Caixa
+        </h1>
+
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Visão gerencial baseada nas entradas e saídas efetivamente movimentadas no período.
+          Não representa uma DRE contábil por regime de competência.
+        </p>
+      </div>
+
+      <span className="rounded-md border border-border px-3 py-1 font-mono text-xs font-semibold">
+        REGIME DE CAIXA
+      </span>
+    </div>
+
+    <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
             <Label htmlFor="from">De</Label>
@@ -329,14 +346,44 @@ function DrePage() {
       )}
 
       {(dre.data?.pendingCount ?? 0) > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-          <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-          <p className="text-sm">
-            <strong>{dre.data?.pendingCount} lançamento(s) pendentes</strong> no período não entram
-            neste demonstrativo. A DRE só considera lançamentos classificados.
-          </p>
-        </div>
-      )}
+  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
+    <div className="flex items-start gap-3">
+      <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+      <div>
+        <p className="text-sm">
+          <strong>{dre.data?.pendingCount} lançamento(s) pendentes</strong> no período ainda
+          não entram neste demonstrativo de caixa.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Classifique primeiro a natureza econômica dessas movimentações para incorporá-las
+          corretamente ao resultado ou ao Balanço.
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+          Entradas pendentes
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {dre.data?.pendingEntryCount ?? 0} lançamento(s) ·{" "}
+          {brl(dre.data?.pendingEntryTotal ?? 0)}
+        </p>
+      </div>
+
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+          Saídas pendentes
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {dre.data?.pendingExitCount ?? 0} lançamento(s) ·{" "}
+          {brl(dre.data?.pendingExitTotal ?? 0)}
+        </p>
+      </div>
+    </div>
+  </div>
+)}
 
       {!hasData ? (
         <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
