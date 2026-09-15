@@ -105,6 +105,8 @@ function GovernancePage() {
 
   return (
     <div className="space-y-10">
+      <RulesImportSection clientId={clientId} isAdmin={Boolean(me.data?.isAdmin)} />
+
       <section>
         <h2 className="font-display text-lg font-semibold">Regras aprendidas</h2>
         <p className="mt-1 text-sm text-muted-foreground">
