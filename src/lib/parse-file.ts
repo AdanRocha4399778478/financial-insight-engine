@@ -163,7 +163,8 @@ export function parseNumber(value: unknown): number {
   let decPart = "";
   if (lastSep >= 0) {
     const decimals = s.length - lastSep - 1;
-    const onlyOneSep = s.indexOf(",") === lastComma && s.indexOf(".") === lastDot && lastComma * lastDot < 0;
+    const onlyOneSep =
+      (lastComma === -1) !== (lastDot === -1) && s.indexOf(",") === lastComma && s.indexOf(".") === lastDot;
     // Separador único com exatamente 3 dígitos após: milhar (ex.: "1.500" / "1,500").
     const isThousand = onlyOneSep && decimals === 3;
     if (!isThousand && decimals > 0 && decimals <= 3) {
