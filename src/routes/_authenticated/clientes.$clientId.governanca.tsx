@@ -1,14 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { UploadCloud } from "lucide-react";
 import { listAudit, listRules, setRuleActive } from "@/lib/entries.functions";
 import { deleteImport, listImports } from "@/lib/imports.functions";
-import { getMe, listTeam, setClientAccess } from "@/lib/clients.functions";
+import { getMe, listClients, listTeam, setClientAccess } from "@/lib/clients.functions";
 import { BEHAVIOR_LABEL, NATURE_LABEL, type Behavior, type Nature } from "@/lib/finance";
+import {
+  buildFromHeaderRow,
+  parseSpreadsheet,
+  type ParsedFile,
+} from "@/lib/parse-file";
+import {
+  RULE_FIELDS,
+  buildRulesFromRows,
+  guessRuleMapping,
+  type RuleField,
+} from "@/lib/rules-file";
+import { commitRulesImport, previewRulesImport } from "@/lib/rules-import.functions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/clientes/$clientId/governanca")({
   head: () => ({
