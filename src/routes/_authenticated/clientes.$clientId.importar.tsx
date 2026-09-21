@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UploadCloud } from "lucide-react";
 import { STANDARD_FIELDS, brl, type StandardField } from "@/lib/finance";
@@ -88,6 +88,7 @@ function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [manualOpeningBalance, setManualOpeningBalance] = useState("");
   const [manualClosingBalance, setManualClosingBalance] = useState("");
+  const [integrityOpen, setIntegrityOpen] = useState(true);
 
   const applyParsed = async (result: ParsedFile, currentMode: Mode) => {
     setParsed(result);
@@ -168,6 +169,22 @@ function ImportPage() {
         closingIndependent,
       })
     : null;
+
+  // Define o estado inicial de aberto/fechado só quando um arquivo novo é
+  // carregado — nunca a cada tecla digitada nos campos de saldo manual.
+  // `balanceIntegrity` é recalculado a cada tecla (depende de
+  // manualOpeningBalance/manualClosingBalance), então usá-lo direto como o
+  // valor de `open` do <details> fechava/reabria o componente a cada
+  // caractere digitado, derrubando o foco do input e a posição de scroll.
+  useEffect(() => {
+    if (!parsed) return;
+    setIntegrityOpen(
+      balanceIntegrity
+        ? balanceIntegrity.status !== "conciliado" && balanceIntegrity.status !== "fechamento_inferido"
+        : true,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parsed]);
 
   const openingSourceLabel = manualOpeningValue !== null
     ? "Informado manualmente"
@@ -567,10 +584,8 @@ function ImportPage() {
 
               {balanceIntegrity && (
                 <details
-                  open={
-                    balanceIntegrity.status !== "conciliado" &&
-                    balanceIntegrity.status !== "fechamento_inferido"
-                  }
+                  open={integrityOpen}
+                  onToggle={(e) => setIntegrityOpen(e.currentTarget.open)}
                   className="rounded-lg border border-border p-5"
                 >
                   <summary className="cursor-pointer list-none">
