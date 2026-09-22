@@ -16,6 +16,19 @@ como correto quando não tem certeza dele. Pendência explícita é sempre
 preferível a uma classificação ou valor inventado. Isso vale tanto para a IA de
 sugestão quanto para qualquer lógica de cálculo ou parsing.
 
+> **⚠️ Bloqueio de segurança em aberto (22/09/2026):** o Teste G da spec
+> original (critério de aceite "Segurança" — um usuário não acessa clientes
+> para os quais não possui permissão) foi verificado **apenas por leitura de
+> código** (as políticas de RLS em `supabase/migrations/...client_users...`
+> usam `can_access_client()` corretamente), **nunca ao vivo**. O único usuário
+> existente no projeto é admin, que bypassa `client_users` por design — não há
+> conta consultor de teste para reproduzir o caso negativo.
+> **NENHUM usuário não-admin deve ser criado** antes de um teste ao vivo
+> confirmar que (1) a tela `/clientes` fica vazia para um consultor sem
+> `client_users` em nenhum cliente, e (2) a URL direta de um cliente não
+> autorizado é bloqueada. Qualquer sessão que for convidar um consultor real
+> precisa resolver isso antes.
+
 ## Stack
 
 - Frontend/backend: TanStack Start (React) + Vite, TypeScript
