@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       account_mappings: {
@@ -20,12 +45,14 @@ export type Database = {
           account_name: string
           active: boolean
           area: string | null
+          balance_group: string | null
           behavior: Database["public"]["Enums"]["entry_behavior"]
           client_id: string
           created_at: string
           created_by: string | null
           id: string
           nature: Database["public"]["Enums"]["entry_nature"]
+          statement_type: string
           updated_at: string
         }
         Insert: {
@@ -33,12 +60,14 @@ export type Database = {
           account_name?: string
           active?: boolean
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           client_id: string
           created_at?: string
           created_by?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["entry_nature"]
+          statement_type?: string
           updated_at?: string
         }
         Update: {
@@ -46,12 +75,14 @@ export type Database = {
           account_name?: string
           active?: boolean
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           client_id?: string
           created_at?: string
           created_by?: string | null
           id?: string
           nature?: Database["public"]["Enums"]["entry_nature"]
+          statement_type?: string
           updated_at?: string
         }
         Relationships: [
@@ -280,6 +311,7 @@ export type Database = {
           account: string | null
           amount: number
           area: string | null
+          balance_group: string | null
           behavior: Database["public"]["Enums"]["entry_behavior"]
           classification_source: string | null
           client_id: string
@@ -299,6 +331,7 @@ export type Database = {
           nature: Database["public"]["Enums"]["entry_nature"]
           original_category: string | null
           raw: Json
+          statement_type: string
           status: Database["public"]["Enums"]["entry_status"]
           updated_at: string
         }
@@ -306,6 +339,7 @@ export type Database = {
           account?: string | null
           amount?: number
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           classification_source?: string | null
           client_id: string
@@ -325,6 +359,7 @@ export type Database = {
           nature?: Database["public"]["Enums"]["entry_nature"]
           original_category?: string | null
           raw?: Json
+          statement_type?: string
           status?: Database["public"]["Enums"]["entry_status"]
           updated_at?: string
         }
@@ -332,6 +367,7 @@ export type Database = {
           account?: string | null
           amount?: number
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           classification_source?: string | null
           client_id?: string
@@ -351,6 +387,7 @@ export type Database = {
           nature?: Database["public"]["Enums"]["entry_nature"]
           original_category?: string | null
           raw?: Json
+          statement_type?: string
           status?: Database["public"]["Enums"]["entry_status"]
           updated_at?: string
         }
@@ -373,42 +410,69 @@ export type Database = {
       }
       imports: {
         Row: {
+          balance_difference: number | null
+          balance_tolerance: number | null
+          calculated_balance: number | null
           client_id: string
+          closing_balance: number | null
+          closing_balance_source: string | null
           created_at: string
           created_by: string | null
           duplicate_rows: number
           filename: string
           id: string
+          integrity_checked_at: string | null
+          integrity_status: string | null
           kind: string
           mapping: Json | null
+          opening_balance: number | null
+          opening_balance_source: string | null
           pending_rows: number
           period_label: string | null
           total_rows: number
           valid_rows: number
         }
         Insert: {
+          balance_difference?: number | null
+          balance_tolerance?: number | null
+          calculated_balance?: number | null
           client_id: string
+          closing_balance?: number | null
+          closing_balance_source?: string | null
           created_at?: string
           created_by?: string | null
           duplicate_rows?: number
           filename: string
           id?: string
+          integrity_checked_at?: string | null
+          integrity_status?: string | null
           kind?: string
           mapping?: Json | null
+          opening_balance?: number | null
+          opening_balance_source?: string | null
           pending_rows?: number
           period_label?: string | null
           total_rows?: number
           valid_rows?: number
         }
         Update: {
+          balance_difference?: number | null
+          balance_tolerance?: number | null
+          calculated_balance?: number | null
           client_id?: string
+          closing_balance?: number | null
+          closing_balance_source?: string | null
           created_at?: string
           created_by?: string | null
           duplicate_rows?: number
           filename?: string
           id?: string
+          integrity_checked_at?: string | null
+          integrity_status?: string | null
           kind?: string
           mapping?: Json | null
+          opening_balance?: number | null
+          opening_balance_source?: string | null
           pending_rows?: number
           period_label?: string | null
           total_rows?: number
@@ -450,6 +514,7 @@ export type Database = {
           account: string
           active: boolean
           area: string | null
+          balance_group: string | null
           behavior: Database["public"]["Enums"]["entry_behavior"]
           client_id: string | null
           confirmed: boolean
@@ -461,11 +526,13 @@ export type Database = {
           nature: Database["public"]["Enums"]["entry_nature"]
           pattern: string
           segment: string | null
+          statement_type: string
         }
         Insert: {
           account: string
           active?: boolean
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           client_id?: string | null
           confirmed?: boolean
@@ -477,11 +544,13 @@ export type Database = {
           nature: Database["public"]["Enums"]["entry_nature"]
           pattern: string
           segment?: string | null
+          statement_type?: string
         }
         Update: {
           account?: string
           active?: boolean
           area?: string | null
+          balance_group?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           client_id?: string | null
           confirmed?: boolean
@@ -493,10 +562,88 @@ export type Database = {
           nature?: Database["public"]["Enums"]["entry_nature"]
           pattern?: string
           segment?: string | null
+          statement_type?: string
         }
         Relationships: [
           {
             foreignKeyName: "rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_examples: {
+        Row: {
+          account: string
+          active: boolean
+          area: string | null
+          balance_group: string | null
+          behavior: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          counterparty: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          fingerprint: string
+          history_key: string
+          id: string
+          nature: Database["public"]["Enums"]["entry_nature"]
+          original_category: string | null
+          source_file: string | null
+          source_row_number: number | null
+          source_type: string
+          statement_type: string
+          updated_at: string
+        }
+        Insert: {
+          account: string
+          active?: boolean
+          area?: string | null
+          balance_group?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          fingerprint: string
+          history_key: string
+          id?: string
+          nature: Database["public"]["Enums"]["entry_nature"]
+          original_category?: string | null
+          source_file?: string | null
+          source_row_number?: number | null
+          source_type?: string
+          statement_type?: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string
+          active?: boolean
+          area?: string | null
+          balance_group?: string | null
+          behavior?: Database["public"]["Enums"]["entry_behavior"]
+          client_id?: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          fingerprint?: string
+          history_key?: string
+          id?: string
+          nature?: Database["public"]["Enums"]["entry_nature"]
+          original_category?: string | null
+          source_file?: string | null
+          source_row_number?: number | null
+          source_type?: string
+          statement_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_examples_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -685,6 +832,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "consultor"],

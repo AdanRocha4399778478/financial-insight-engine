@@ -3,6 +3,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { NATURES, BEHAVIORS } from "./finance";
 import { normalize, statusFor } from "./classify";
+import {
+  prepareTrainingBatch,
+  type ExistingTrainingExample,
+  type TrainingInputRow,
+} from "./training-import";
 
 const natureEnum = z.enum(NATURES as [string, ...string[]]);
 const behaviorEnum = z.enum(BEHAVIORS as [string, ...string[]]);
@@ -22,6 +27,7 @@ export const listEntries = createServerFn({ method: "GET" })
         clientId: z.string().uuid(),
         status: z.string().max(20).nullable(),
         search: z.string().max(120).nullable(),
+        entryIds: z.array(z.string().uuid()).max(5000).nullable().default(null),
         importId: z.string().uuid().nullable(),
         limit: z.number().min(1).max(500).default(200),
       })
@@ -37,7 +43,8 @@ export const listEntries = createServerFn({ method: "GET" })
 
     if (data.status && data.status !== "todos") query = query.eq("status", data.status as never);
     if (data.importId) query = query.eq("import_id", data.importId);
-    if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
+    if (data.entryIds?.length) query = query.in("id", data.entryIds);
+    else if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
 
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
@@ -82,6 +89,88 @@ async function writeAudit(
   });
 }
 
+async function learnFromConfirmedEntries(
+  supabase: { from: (table: string) => any },
+  args: {
+    clientId: string;
+    userId: string;
+    rows: Array<{
+      description: string;
+      counterparty: string | null;
+      original_category: string | null;
+      account: string | null;
+      nature: string;
+      behavior: string;
+      area: string | null;
+    }>;
+  },
+) {
+  const candidates: TrainingInputRow[] = args.rows
+    .filter((row) => Boolean(row.account))
+    .map((row, index) => ({
+      description: row.description,
+      counterparty: row.counterparty,
+      originalCategory: row.original_category,
+      account: row.account!,
+      nature: row.nature as TrainingInputRow["nature"],
+      behavior: row.behavior as TrainingInputRow["behavior"],
+      area: row.area,
+      sourceRowNumber: index + 1,
+    }));
+
+  if (candidates.length === 0) {
+    return { learned: 0, duplicates: 0, conflicts: 0, invalid: 0 };
+  }
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("training_examples")
+    .select("history_key, account, nature, behavior, area, fingerprint")
+    .eq("client_id", args.clientId)
+    .eq("active", true)
+    .limit(50000);
+  if (existingError) throw new Error(existingError.message);
+
+  const existing: ExistingTrainingExample[] = (existingRows ?? []).map((row: any) => ({
+    historyKey: row.history_key,
+    account: row.account,
+    nature: row.nature as ExistingTrainingExample["nature"],
+    behavior: row.behavior as ExistingTrainingExample["behavior"],
+    area: row.area,
+    fingerprint: row.fingerprint,
+  }));
+
+  const prepared = prepareTrainingBatch(args.clientId, candidates, existing);
+  const payload = prepared.ready.map((row) => ({
+    client_id: args.clientId,
+    description: row.description,
+    counterparty: row.counterparty,
+    original_category: row.originalCategory,
+    history_key: row.historyKey,
+    account: row.account,
+    nature: row.nature as never,
+    behavior: row.behavior as never,
+    area: row.area,
+    source_type: "human_confirmation",
+    source_file: null,
+    source_row_number: null,
+    fingerprint: row.fingerprint,
+    active: true,
+    created_by: args.userId,
+  }));
+
+  if (payload.length > 0) {
+    const { error: insertError } = await supabase.from("training_examples").insert(payload);
+    if (insertError) throw new Error(insertError.message);
+  }
+
+  return {
+    learned: payload.length,
+    duplicates: prepared.duplicatesInBatch.length + prepared.duplicatesExisting.length,
+    conflicts: prepared.conflicts.length,
+    invalid: prepared.invalid.length,
+  };
+}
+
 export const classifyEntries = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
@@ -100,7 +189,7 @@ export const classifyEntries = createServerFn({ method: "POST" })
     const supabase = context.supabase;
     const { data: before, error: beforeError } = await supabase
       .from("entries")
-      .select("id, account, nature, behavior, area, status, description, counterparty")
+      .select("id, account, nature, behavior, area, status, description, counterparty, original_category")
       .eq("client_id", data.clientId)
       .in("id", data.entryIds);
     if (beforeError) throw new Error(beforeError.message);
@@ -113,6 +202,8 @@ export const classifyEntries = createServerFn({ method: "POST" })
         nature: data.values.nature as never,
         behavior: data.values.behavior as never,
         area: data.values.area,
+        statement_type: "resultado",
+        balance_group: null,
         status: "confirmado",
         confidence: 1,
         classification_source: "confirmacao_humana",
@@ -168,7 +259,21 @@ export const classifyEntries = createServerFn({ method: "POST" })
       });
     }
 
-    return { updated: before.length, ruleId };
+    const learning = await learnFromConfirmedEntries(supabase as never, {
+      clientId: data.clientId,
+      userId: context.userId,
+      rows: before.map((row) => ({
+        description: row.description,
+        counterparty: row.counterparty,
+        original_category: row.original_category,
+        account: data.values.account,
+        nature: data.values.nature,
+        behavior: data.values.behavior,
+        area: data.values.area,
+      })),
+    });
+
+    return { updated: before.length, ruleId, learning };
   });
 
 export const ignoreEntries = createServerFn({ method: "POST" })
@@ -196,14 +301,75 @@ export const confirmSuggestions = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const supabase = context.supabase;
+    const { data: before, error: beforeError } = await supabase
+      .from("entries")
+      .select("id, description, counterparty, original_category, account, nature, behavior, area, status, classification_source, confidence")
+      .eq("client_id", data.clientId)
+      .in("id", data.entryIds)
+      .eq("status", "sugerido")
+      .not("account", "is", null);
+    if (beforeError) throw new Error(beforeError.message);
+    if (!before?.length) return { updated: 0, learning: { learned: 0, duplicates: 0, conflicts: 0, invalid: 0 } };
+
+    const eligibleIds = before.map((row) => row.id);
+    const { data: updatedRows, error } = await supabase
       .from("entries")
       .update({ status: "confirmado", confidence: 1 })
       .eq("client_id", data.clientId)
-      .in("id", data.entryIds)
-      .not("account", "is", null);
+      .eq("status", "sugerido")
+      .in("id", eligibleIds)
+      .not("account", "is", null)
+      .select("id");
     if (error) throw new Error(error.message);
-    return { updated: data.entryIds.length };
+
+    const updatedIds = new Set((updatedRows ?? []).map((row) => row.id));
+    const confirmedRows = before.filter((row) => updatedIds.has(row.id));
+
+    for (const row of confirmedRows) {
+      await writeAudit(supabase as never, {
+        clientId: data.clientId,
+        entryId: row.id,
+        userId: context.userId,
+        previous: {
+          account: row.account,
+          nature: row.nature,
+          behavior: row.behavior,
+          area: row.area,
+          status: row.status,
+          classification_source: row.classification_source,
+          confidence: row.confidence,
+        },
+        next: {
+          account: row.account,
+          nature: row.nature,
+          behavior: row.behavior,
+          area: row.area,
+          status: "confirmado",
+          classification_source: row.classification_source,
+          confidence: 1,
+        },
+        source: "confirmacao_sugestao",
+        confidence: 1,
+        becameRule: false,
+      });
+    }
+
+    const learning = await learnFromConfirmedEntries(supabase as never, {
+      clientId: data.clientId,
+      userId: context.userId,
+      rows: confirmedRows.map((row) => ({
+        description: row.description,
+        counterparty: row.counterparty,
+        original_category: row.original_category,
+        account: row.account,
+        nature: row.nature,
+        behavior: row.behavior,
+        area: row.area,
+      })),
+    });
+
+    return { updated: updatedIds.size, learning };
   });
 
 export const listRules = createServerFn({ method: "GET" })
@@ -333,7 +499,6 @@ ${entries.map((e) => `- id=${e.id} | descrição="${e.description}" | fornecedor
     let updated = 0;
     for (const s of suggestions.data) {
       if (!validIds.has(s.id)) continue;
-      // IA nunca classifica automaticamente: teto de confiança abaixo do limite automático.
       const confidence = Math.min(Math.max(s.confidence, 0), 0.8);
       const status = statusFor(confidence) === "auto" ? "sugerido" : statusFor(confidence);
       const { error: updateError } = await supabase

@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { classifyEntry, fingerprint, historyKey, type HistoryLike, type RuleLike } from "./classify";
+import { classifyEntry, fingerprint, historyKey, type RuleLike } from "./classify";
+import { mergeHistoryCandidates, type HistoryCandidate } from "./classification-history";
+import { calculateImportBalanceIntegrity } from "./import-balance-integrity";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 export const getSavedMapping = createServerFn({ method: "GET" })
@@ -31,6 +33,18 @@ const rowSchema = z.object({
   raw: z.record(z.string(), z.unknown()),
 });
 
+const integrityEvidenceSchema = z.object({
+  openingBalance: z.number().nullable(),
+  closingBalance: z.number().nullable(),
+  openingSource: z.enum(["manual", "extrato", "inferido"]).nullable(),
+  closingSource: z.enum(["manual", "extrato", "inferido"]).nullable(),
+  openingIndependent: z.boolean(),
+  closingIndependent: z.boolean(),
+  creditTotal: z.number(),
+  debitTotal: z.number(),
+  tolerance: z.number().min(0).max(1000).default(0.01),
+});
+
 export const commitImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
@@ -43,6 +57,7 @@ export const commitImport = createServerFn({ method: "POST" })
         mapping: z.record(z.string(), z.string()),
         allowDuplicates: z.boolean(),
         rows: z.array(rowSchema).max(20000),
+        integrityEvidence: integrityEvidenceSchema.nullable().optional(),
       })
       .parse(input),
   )
@@ -63,27 +78,51 @@ export const commitImport = createServerFn({ method: "POST" })
       .eq("active", true)
       .or(`client_id.eq.${data.clientId},client_id.is.null`);
 
-    const { data: historyRows } = await supabase
+    const { data: historyRows, error: historyError } = await supabase
       .from("entries")
       .select("description, counterparty, account, nature, behavior, area")
       .eq("client_id", data.clientId)
       .in("status", ["confirmado", "auto"])
       .not("account", "is", null)
       .limit(5000);
+    if (historyError) throw new Error(historyError.message);
 
-    const historyMap = new Map<string, HistoryLike>();
+    const { data: trainingRows, error: trainingError } = await supabase
+      .from("training_examples")
+      .select("history_key, account, nature, behavior, area")
+      .eq("client_id", data.clientId)
+      .eq("active", true)
+      .limit(5000);
+    if (trainingError) throw new Error(trainingError.message);
+
+    const historyCandidates: HistoryCandidate[] = [];
     for (const h of historyRows ?? []) {
       const key = historyKey({ description: h.description, counterparty: h.counterparty });
-      if (key && !historyMap.has(key) && h.account) {
-        historyMap.set(key, {
+      if (key && h.account) {
+        historyCandidates.push({
           key,
           account: h.account,
           nature: h.nature,
           behavior: h.behavior,
           area: h.area,
+          source: "entry",
         });
       }
     }
+    for (const h of trainingRows ?? []) {
+      if (h.history_key && h.account) {
+        historyCandidates.push({
+          key: h.history_key,
+          account: h.account,
+          nature: h.nature,
+          behavior: h.behavior,
+          area: h.area,
+          source: "training",
+        });
+      }
+    }
+
+    const { history } = mergeHistoryCandidates(historyCandidates);
 
     const { data: existing } = await supabase
       .from("entries")
@@ -91,6 +130,18 @@ export const commitImport = createServerFn({ method: "POST" })
       .eq("client_id", data.clientId)
       .limit(50000);
     const seen = new Set((existing ?? []).map((e) => e.fingerprint));
+
+    const integrity = data.integrityEvidence
+      ? calculateImportBalanceIntegrity({
+          openingBalance: data.integrityEvidence.openingBalance,
+          closingBalance: data.integrityEvidence.closingBalance,
+          creditTotal: data.integrityEvidence.creditTotal,
+          debitTotal: data.integrityEvidence.debitTotal,
+          tolerance: data.integrityEvidence.tolerance,
+          openingIndependent: data.integrityEvidence.openingIndependent,
+          closingIndependent: data.integrityEvidence.closingIndependent,
+        })
+      : null;
 
     const { data: importRow, error: importError } = await supabase
       .from("imports")
@@ -101,6 +152,15 @@ export const commitImport = createServerFn({ method: "POST" })
         mapping: data.mapping,
         total_rows: data.rows.length,
         created_by: context.userId,
+        integrity_status: integrity?.status ?? null,
+        opening_balance: integrity?.openingBalance ?? null,
+        opening_balance_source: data.integrityEvidence?.openingSource ?? null,
+        closing_balance: integrity?.closingBalance ?? null,
+        closing_balance_source: data.integrityEvidence?.closingSource ?? null,
+        calculated_balance: integrity?.calculatedBalance ?? null,
+        balance_difference: integrity?.difference ?? null,
+        balance_tolerance: integrity?.tolerance ?? null,
+        integrity_checked_at: integrity ? new Date().toISOString() : null,
       })
       .select("id")
       .single();
@@ -137,7 +197,7 @@ export const commitImport = createServerFn({ method: "POST" })
           clientId: data.clientId,
           segment: client.segment,
           rules: (rules ?? []) as unknown as RuleLike[],
-          history: [...historyMap.values()],
+          history,
         },
       );
 
@@ -195,6 +255,7 @@ export const commitImport = createServerFn({ method: "POST" })
       auto,
       suggested,
       pending,
+      integrityStatus: integrity?.status ?? null,
     };
   });
 

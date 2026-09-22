@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalize } from "./classify";
 import { STANDARD_FIELDS, type StandardField } from "./finance";
+import { inferBalancesFromRunningBalance } from "./import-balance-integrity";
 
 export interface ParsedFile {
   columns: string[];
@@ -30,6 +31,22 @@ const HEADER_TOKENS = [
   "SALDO",
   "LANCAMENTO",
   "MONTANTE",
+];
+
+const BALANCE_DESCRIPTIONS = [
+  "SALDO",
+  "SALDO DO DIA",
+  "SALDO ANTERIOR",
+  "SALDO ATUAL",
+  "SALDO FINAL",
+  "SALDO INICIAL",
+  "SALDO DISPONIVEL",
+  "SALDO CONTA",
+  "SALDO DA CONTA",
+  "SALDO EM CONTA",
+  "SALDO BLOQUEADO",
+  "SALDO APLICACAO",
+  "SALDO APLICACOES",
 ];
 
 const cellText = (v: unknown) => (v === null || v === undefined ? "" : String(v).trim());
@@ -109,7 +126,6 @@ export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
   return buildFromHeaderRow(matrix, detected.index);
 }
 
-
 const HINTS: Record<StandardField, string[]> = {
   entry_date: ["DATA", "DT", "DT MOVIMENTO", "DATA MOVIMENTO", "COMPETENCIA", "VENCIMENTO", "EMISSAO"],
   description: ["DESCRICAO", "HISTORICO", "OBSERVACAO", "MEMO", "LANCAMENTO"],
@@ -117,10 +133,11 @@ const HINTS: Record<StandardField, string[]> = {
   amount: ["VALOR", "VL LANCAMENTO", "VL", "MONTANTE", "TOTAL"],
   credit: ["CREDITO", "ENTRADA", "RECEBIMENTO"],
   debit: ["DEBITO", "SAIDA", "PAGAMENTO"],
+  balance: ["SALDO", "SALDO R$", "SALDO CONTA", "SALDO DA CONTA", "SALDO DISPONIVEL"],
   original_category: ["CATEGORIA", "PLANO DE CONTAS", "CONTA", "CLASSIFICACAO"],
   cost_center: ["CENTRO DE CUSTO", "CC", "CENTRO CUSTO", "UNIDADE", "FILIAL"],
   document: ["DOCUMENTO", "NF", "NOTA", "DOC"],
-  movement_type: ["TIPO", "SITUACAO", "NATUREZA", "OPERACAO"],
+  movement_type: ["TIPO", "SITUACAO", "NATUREZA", "OPERACAO", "C/D", "D/C", "C D", "D C"],
 };
 
 export function guessMapping(columns: string[]): Partial<Record<StandardField, string>> {
@@ -131,7 +148,7 @@ export function guessMapping(columns: string[]): Partial<Record<StandardField, s
     const found = columns.find((col) => {
       if (used.has(col)) return false;
       const n = normalize(col);
-      return hints.some((h) => n === h || n.startsWith(h) || n.includes(h));
+      return hints.some((h) => n === normalize(h) || n.startsWith(normalize(h)) || n.includes(normalize(h)));
     });
     if (found) {
       mapping[field.key] = found;
@@ -178,21 +195,53 @@ export function parseNumber(value: unknown): number {
   return negative ? -n : n;
 }
 
+function parseOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = parseNumber(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function validDateParts(year: number, month: number, day: number): boolean {
+  if (year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function isoDate(year: number, month: number, day: number): string | null {
+  if (!validDateParts(year, month, day)) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function parseDate(value: unknown): string | null {
   if (!value) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime()))
-    return value.toISOString().slice(0, 10);
-  const s = String(value).trim();
-  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-  if (br) {
-    const [, d, m, y] = br;
-    const year = y!.length === 2 ? `20${y}` : y!;
-    return `${year}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return isoDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
   }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return iso[0];
+
+  const s = String(value).trim();
+  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\D|$)/);
+  if (br) {
+    const day = Number(br[1]);
+    const month = Number(br[2]);
+    const rawYear = br[3]!;
+    const year = Number(rawYear.length === 2 ? `20${rawYear}` : rawYear);
+    return isoDate(year, month, day);
+  }
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\D|$)/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const second = Number(iso[2]);
+    const third = Number(iso[3]);
+    const normal = isoDate(year, second, third);
+    if (normal) return normal;
+    return isoDate(year, third, second);
+  }
+
   const parsed = new Date(s);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!Number.isNaN(parsed.getTime())) {
+    return isoDate(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+  }
   return null;
 }
 
@@ -201,6 +250,7 @@ export interface NormalizedRow {
   description: string;
   counterparty: string | null;
   amount: number;
+  balance: number | null;
   movement_type: string | null;
   original_category: string | null;
   cost_center: string | null;
@@ -213,6 +263,7 @@ export interface NormalizeSummary {
   valid: number;
   discarded: number;
   discardedNoMovement: number;
+  discardedBalance: number;
   discardedRepeatedHeader: number;
   discardedInvalid: number;
   creditCount: number;
@@ -223,7 +274,6 @@ export interface NormalizeSummary {
   balanceRows: { description: string; value: number }[];
 }
 
-/** Uma linha do conteúdo que repete os nomes de colunas do cabeçalho não é lançamento. */
 export function isRepeatedHeader(row: Record<string, unknown>): boolean {
   const values = Object.values(row)
     .map((v) => (v === null || v === undefined ? "" : String(v).trim()))
@@ -238,6 +288,44 @@ export function isRepeatedHeader(row: Record<string, unknown>): boolean {
   return hits >= 2 && hits >= Math.ceil(values.length / 2);
 }
 
+export function isBalanceDescription(description: string): boolean {
+  const n = normalize(description);
+  if (!n) return false;
+  if (BALANCE_DESCRIPTIONS.includes(n)) return true;
+  return /^SALDO\b/.test(n) && !/MOVIMENT|TRANSFER|RESGATE|APLICACAO AUTOMATICA/.test(n);
+}
+
+function movementDirection(value: string | null): "credit" | "debit" | null {
+  const normalized = normalize(value);
+  if (!normalized) return null;
+  if (["C", "CR", "CREDITO", "CREDIT", "ENTRADA", "RECEBIMENTO"].includes(normalized)) return "credit";
+  if (["D", "DB", "DEBITO", "DEBIT", "SAIDA", "PAGAMENTO"].includes(normalized)) return "debit";
+  return null;
+}
+
+function directionFromDescription(description: string): "debit" | null {
+  const normalized = normalize(description);
+  if (!normalized) return null;
+  const debitPrefixes = [
+    "DEB ",
+    "DEBITO ",
+    "PAGAMENTO ",
+    "PIX EMIT ",
+    "PIX ENVIADO ",
+    "COMPRA CARTAO ",
+    "CARTAO VISA ",
+    "TARIFA ",
+  ];
+  return debitPrefixes.some((prefix) => normalized.startsWith(prefix)) ? "debit" : null;
+}
+
+function limitedString(value: unknown, max: number): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  return text.slice(0, max);
+}
+
 export function normalizeRows(
   rows: Record<string, unknown>[],
   mapping: Partial<Record<StandardField, string>>,
@@ -248,6 +336,7 @@ export function normalizeRows(
     valid: 0,
     discarded: 0,
     discardedNoMovement: 0,
+    discardedBalance: 0,
     discardedRepeatedHeader: 0,
     discardedInvalid: 0,
     creditCount: 0,
@@ -270,21 +359,38 @@ export function normalizeRows(
     }
 
     const date = parseDate(pick(row, "entry_date"));
-    const description = String(pick(row, "description") ?? "").trim();
+    const description = String(pick(row, "description") ?? "").trim().slice(0, 500);
+    const movementType = limitedString(pick(row, "movement_type"), 120);
+    const runningBalance = mapping.balance ? parseOptionalNumber(pick(row, "balance")) : null;
 
     const credit = mapping.credit ? parseNumber(pick(row, "credit")) : 0;
     const debit = mapping.debit ? parseNumber(pick(row, "debit")) : 0;
     const single = mapping.amount ? parseNumber(pick(row, "amount")) : 0;
 
     let amount = 0;
-    if (credit !== 0 || debit !== 0) amount = credit !== 0 ? credit : -Math.abs(debit);
-    else amount = single;
+    if (credit !== 0 || debit !== 0) {
+      amount = credit !== 0 ? Math.abs(credit) : -Math.abs(debit);
+    } else {
+      amount = single;
+      if (amount > 0) {
+        const explicitDirection = movementDirection(movementType);
+        if (explicitDirection === "debit" || (!explicitDirection && directionFromDescription(description) === "debit")) {
+          amount = -Math.abs(amount);
+        }
+      }
+    }
 
-    // Regra principal: sem movimento financeiro (crédito, débito ou valor) não é lançamento.
+    if (isBalanceDescription(description)) {
+      summary.discardedBalance += 1;
+      const balanceValue = runningBalance ?? amount;
+      if (balanceValue !== 0) summary.balanceRows.push({ description, value: balanceValue });
+      continue;
+    }
+
     if (amount === 0) {
       summary.discardedNoMovement += 1;
       if (description) {
-        const balance = parseNumber(row[Object.keys(row)[Object.keys(row).length - 1] ?? ""]);
+        const balance = runningBalance ?? parseNumber(row[Object.keys(row)[Object.keys(row).length - 1] ?? ""]);
         if (balance !== 0) summary.balanceRows.push({ description, value: balance });
       }
       continue;
@@ -294,12 +400,6 @@ export function normalizeRows(
       summary.discardedInvalid += 1;
       continue;
     }
-
-    const str = (f: StandardField) => {
-      const v = pick(row, f);
-      const s = v === null || v === undefined ? "" : String(v).trim();
-      return s === "" ? null : s;
-    };
 
     if (amount > 0) {
       summary.creditCount += 1;
@@ -312,20 +412,32 @@ export function normalizeRows(
     valid.push({
       entry_date: date,
       description: description || "(sem descrição)",
-      counterparty: str("counterparty"),
+      counterparty: limitedString(pick(row, "counterparty"), 300),
       amount,
-      movement_type: str("movement_type"),
-      original_category: str("original_category"),
-      cost_center: str("cost_center"),
-      document: str("document"),
+      balance: runningBalance,
+      movement_type: movementType,
+      original_category: limitedString(pick(row, "original_category"), 200),
+      cost_center: limitedString(pick(row, "cost_center"), 200),
+      document: limitedString(pick(row, "document"), 120),
       raw: row,
     });
   }
 
+  if (mapping.balance && valid.length >= 2) {
+    const inferred = inferBalancesFromRunningBalance(
+      valid.map((row) => ({ amount: row.amount, balance: row.balance })),
+    );
+    if (inferred.openingBalance !== null && inferred.closingBalance !== null) {
+      summary.balanceRows.push(
+        { description: "SALDO INICIAL (COLUNA SALDO)", value: inferred.openingBalance },
+        { description: "SALDO FINAL (COLUNA SALDO)", value: inferred.closingBalance },
+      );
+    }
+  }
+
   summary.valid = valid.length;
   summary.discarded =
-    summary.discardedNoMovement + summary.discardedRepeatedHeader + summary.discardedInvalid;
+    summary.discardedNoMovement + summary.discardedBalance + summary.discardedRepeatedHeader + summary.discardedInvalid;
   summary.net = summary.creditTotal - summary.debitTotal;
   return { valid, invalid: summary.discarded, summary };
 }
-

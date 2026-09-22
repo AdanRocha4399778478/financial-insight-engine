@@ -63,6 +63,7 @@ export const STANDARD_FIELDS = [
   { key: "amount", label: "Valor", required: true },
   { key: "credit", label: "Crédito", required: false },
   { key: "debit", label: "Débito", required: false },
+  { key: "balance", label: "Saldo", required: false },
   { key: "original_category", label: "Categoria original", required: false },
   { key: "cost_center", label: "Centro de custo", required: false },
   { key: "document", label: "Documento", required: false },

@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
-import { drilldownEntries, getDreData } from "@/lib/dre.functions";
+import { drilldownEntries, getClientDataRange, getDreData } from "@/lib/dre.functions";
+import { listImports } from "@/lib/imports.functions";
 import {
   NATURE_LABEL,
   brl,
@@ -13,6 +14,7 @@ import {
   type DreRow,
   type Nature,
 } from "@/lib/finance";
+import { ImportIntegrityStatus, type IntegrityStatus } from "@/components/import-integrity-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,24 +51,104 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/dre")({
 });
 
 const ALL = "__all__";
+type DateRange = { from: string; to: string };
 
-function defaultRange() {
+function fallbackRange(): DateRange {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
+function monthRange(date: Date): DateRange {
+  const from = new Date(date.getFullYear(), date.getMonth(), 1);
+  const to = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+function rollingMonths(months: number): DateRange {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+function yearRange(): DateRange {
+  const now = new Date();
+  return {
+    from: `${now.getFullYear()}-01-01`,
+    to: `${now.getFullYear()}-12-31`,
+  };
+}
+
+function validRange(value: unknown): value is DateRange {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as DateRange;
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate.from) && /^\d{4}-\d{2}-\d{2}$/.test(candidate.to);
+}
+
 function DrePage() {
   const { clientId } = Route.useParams();
   const fetchDre = useServerFn(getDreData);
   const fetchDrill = useServerFn(drilldownEntries);
+  const fetchImports = useServerFn(listImports);
+  const fetchDataRange = useServerFn(getClientDataRange);
 
-  const [range, setRange] = useState(defaultRange);
+  const [range, setRange] = useState<DateRange>(fallbackRange);
+  const [readyClientId, setReadyClientId] = useState<string | null>(null);
   const [dimension, setDimension] = useState(ALL);
   const [drill, setDrill] = useState<{ nature: Nature; account: string | null; label: string } | null>(
     null,
   );
+
+  const dataRange = useQuery({
+    queryKey: ["dre-data-range", clientId],
+    queryFn: () => fetchDataRange({ data: { clientId } }),
+  });
+
+  useEffect(() => {
+    if (readyClientId === clientId || dataRange.isLoading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const urlRange = { from: params.get("from") ?? "", to: params.get("to") ?? "" };
+    if (validRange(urlRange)) {
+      setRange(urlRange);
+      setReadyClientId(clientId);
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem(`dre-range:${clientId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown;
+        if (validRange(parsed)) {
+          setRange(parsed);
+          setReadyClientId(clientId);
+          return;
+        }
+      }
+    } catch {
+      // localStorage indisponível ou valor antigo inválido: segue para o período inteligente.
+    }
+
+    setRange(dataRange.data ?? fallbackRange());
+    setReadyClientId(clientId);
+  }, [clientId, dataRange.data, dataRange.isLoading, readyClientId]);
+
+  useEffect(() => {
+    if (readyClientId !== clientId) return;
+
+    try {
+      window.localStorage.setItem(`dre-range:${clientId}`, JSON.stringify(range));
+    } catch {
+      // Persistência local é conveniência, não requisito para carregar a DRE.
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("from", range.from);
+    url.searchParams.set("to", range.to);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [clientId, range, readyClientId]);
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, dimension],
@@ -79,6 +161,11 @@ function DrePage() {
           dimension: dimension === ALL ? null : dimension,
         },
       }),
+  });
+
+  const imports = useQuery({
+    queryKey: ["imports", clientId],
+    queryFn: () => fetchImports({ data: { clientId } }),
   });
 
   const drillQuery = useQuery({
@@ -109,6 +196,12 @@ function DrePage() {
   }, [dre.data]);
 
   const hasData = (dre.data?.rows.length ?? 0) > 0;
+  const latestImport = imports.data?.find((imp) => imp.valid_rows > 0);
+  const hasDataOutsideRange = Boolean(
+    !hasData &&
+      dataRange.data &&
+      (range.from > dataRange.data.to || range.to < dataRange.data.from || range.from > dataRange.data.from || range.to < dataRange.data.to),
+  );
   const rl = result.receitaLiquida;
   const share = (value: number) => (rl > 0 ? pct((value / rl) * 100) : "—");
 
@@ -158,60 +251,154 @@ function DrePage() {
     </div>
   );
 
+  const setPreset = (preset: "current" | "previous" | "3m" | "6m" | "12m" | "year" | "data") => {
+    const now = new Date();
+    if (preset === "current") setRange(monthRange(now));
+    if (preset === "previous") setRange(monthRange(new Date(now.getFullYear(), now.getMonth() - 1, 1)));
+    if (preset === "3m") setRange(rollingMonths(3));
+    if (preset === "6m") setRange(rollingMonths(6));
+    if (preset === "12m") setRange(rollingMonths(12));
+    if (preset === "year") setRange(yearRange());
+    if (preset === "data" && dataRange.data) setRange(dataRange.data);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-card p-5">
-        <div className="space-y-2">
-          <Label htmlFor="from">De</Label>
-          <Input
-            id="from"
-            type="date"
-            value={range.from}
-            onChange={(e) => setRange({ ...range, from: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="to">Até</Label>
-          <Input
-            id="to"
-            type="date"
-            value={range.to}
-            onChange={(e) => setRange({ ...range, to: e.target.value })}
-          />
-        </div>
-        {(dre.data?.dimensions.length ?? 0) > 0 && (
-          <div className="space-y-2">
-            <Label>Dimensão</Label>
-            <Select value={dimension} onValueChange={setDimension}>
-              <SelectTrigger className="w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Consolidado</SelectItem>
-                {dre.data?.dimensions.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+       <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="font-display text-xl font-semibold">
+          DRE Gerencial de Caixa
+        </h1>
+
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Visão gerencial baseada nas entradas e saídas efetivamente movimentadas no período.
+          Não representa uma DRE contábil por regime de competência.
+        </p>
       </div>
 
-      {(dre.data?.pendingCount ?? 0) > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-          <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-          <p className="text-sm">
-            <strong>{dre.data?.pendingCount} lançamento(s) pendentes</strong> no período não entram
-            neste demonstrativo. A DRE só considera base validada.
-          </p>
+      <span className="rounded-md border border-border px-3 py-1 font-mono text-xs font-semibold">
+        REGIME DE CAIXA
+      </span>
+    </div>
+
+    <div className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="from">De</Label>
+            <Input
+              id="from"
+              type="date"
+              value={range.from}
+              onChange={(e) => setRange({ ...range, from: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="to">Até</Label>
+            <Input
+              id="to"
+              type="date"
+              value={range.to}
+              onChange={(e) => setRange({ ...range, to: e.target.value })}
+            />
+          </div>
+          {(dre.data?.dimensions.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <Label>Dimensão</Label>
+              <Select value={dimension} onValueChange={setDimension}>
+                <SelectTrigger className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Consolidado</SelectItem>
+                  {dre.data?.dimensions.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <span className="mr-1 font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Período rápido</span>
+          <Button variant="outline" size="sm" onClick={() => setPreset("current")}>Mês atual</Button>
+          <Button variant="outline" size="sm" onClick={() => setPreset("previous")}>Mês anterior</Button>
+          <Button variant="outline" size="sm" onClick={() => setPreset("3m")}>3 meses</Button>
+          <Button variant="outline" size="sm" onClick={() => setPreset("6m")}>6 meses</Button>
+          <Button variant="outline" size="sm" onClick={() => setPreset("12m")}>12 meses</Button>
+          <Button variant="outline" size="sm" onClick={() => setPreset("year")}>Ano atual</Button>
+          {dataRange.data && (
+            <Button variant="secondary" size="sm" onClick={() => setPreset("data")}>Todo período com dados</Button>
+          )}
+        </div>
+      </div>
+
+      {latestImport && (
+        <ImportIntegrityStatus
+          clientId={clientId}
+          status={latestImport.integrity_status as IntegrityStatus}
+          filename={latestImport.filename}
+          checkedAt={latestImport.integrity_checked_at}
+          difference={latestImport.balance_difference}
+          compact
+        />
       )}
 
+      {(dre.data?.pendingCount ?? 0) > 0 && (
+  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5">
+    <div className="flex items-start gap-3">
+      <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+      <div>
+        <p className="text-sm">
+          <strong>{dre.data?.pendingCount} lançamento(s) pendentes</strong> no período ainda
+          não entram neste demonstrativo de caixa.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Classifique primeiro a natureza econômica dessas movimentações para incorporá-las
+          corretamente ao resultado ou ao Balanço.
+        </p>
+      </div>
+    </div>
+
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+          Entradas pendentes
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {dre.data?.pendingEntryCount ?? 0} lançamento(s) ·{" "}
+          {brl(dre.data?.pendingEntryTotal ?? 0)}
+        </p>
+      </div>
+
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+          Saídas pendentes
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {dre.data?.pendingExitCount ?? 0} lançamento(s) ·{" "}
+          {brl(dre.data?.pendingExitTotal ?? 0)}
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
       {!hasData ? (
-        <div className="rounded-lg border border-dashed border-border p-16 text-center text-sm text-muted-foreground">
-          Sem base validada no período selecionado.
+        <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+          <p>Sem lançamentos classificados no período selecionado.</p>
+          {hasDataOutsideRange && dataRange.data && (
+            <div className="mt-4">
+              <p>
+                Este cliente possui dados entre {new Date(`${dataRange.data.from}T12:00:00`).toLocaleDateString("pt-BR")} e{" "}
+                {new Date(`${dataRange.data.to}T12:00:00`).toLocaleDateString("pt-BR")}.
+              </p>
+              <Button className="mt-3" variant="secondary" size="sm" onClick={() => setRange(dataRange.data!)}>
+                Ajustar para o período com dados
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">

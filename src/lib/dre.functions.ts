@@ -9,7 +9,7 @@ const periodSchema = z.object({
   dimension: z.string().max(120).nullable(),
 });
 
-/** Somente base validada entra na DRE: pendentes ficam de fora (spec §24 - Teste D). */
+/** Somente movimentações classificadas de Resultado entram na DRE Gerencial de Caixa; Balanço e pendentes ficam de fora. */
 export const getDreData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => periodSchema.parse(input))
@@ -19,6 +19,7 @@ export const getDreData = createServerFn({ method: "GET" })
         .from("entries")
         .select("entry_date, amount, nature, behavior, account, area, excluded_from_dre, status, cost_center")
         .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
         .in("status", ["auto", "confirmado", "sugerido"])
         .limit(50000);
 
@@ -29,21 +30,35 @@ export const getDreData = createServerFn({ method: "GET" })
 
     const { data: pendingRows } = await context.supabase
       .from("entries")
-      .select("id")
+      .select("id, amount")
       .eq("client_id", data.clientId)
       .eq("status", "pendente")
       .gte("entry_date", data.from)
       .lte("entry_date", data.to)
       .limit(50000);
 
+    const pendingList = pendingRows ?? [];
+    const pendingEntries = pendingList.filter((row) => Number(row.amount) > 0);
+    const pendingExits = pendingList.filter((row) => Number(row.amount) < 0);
+
+    const pendingEntryTotal = pendingEntries.reduce(
+      (sum, row) => sum + Number(row.amount),
+      0,
+    );
+
+    const pendingExitTotal = pendingExits.reduce(
+      (sum, row) => sum + Math.abs(Number(row.amount)),
+      0,
+    );
+
     const { data: dimensionRows } = await context.supabase
       .from("entries")
       .select("cost_center")
       .eq("client_id", data.clientId)
+      .eq("statement_type", "resultado")
       .not("cost_center", "is", null)
       .limit(5000);
 
-    // Importações tipo "DRE pronta": contas já mapeadas ao Plano Gerencial entram na DRE.
     const { data: facts } = await context.supabase
       .from("dre_facts")
       .select("period, amount, account_code, account_name")
@@ -54,14 +69,14 @@ export const getDreData = createServerFn({ method: "GET" })
 
     const { data: maps } = await context.supabase
       .from("account_mappings")
-      .select("account_code, account_name, nature, behavior, area, active")
+      .select("account_code, account_name, nature, behavior, area, active, statement_type")
       .eq("client_id", data.clientId)
       .limit(20000);
 
     const mapByCode = new Map((maps ?? []).map((m) => [m.account_code, m]));
     const factRows = (facts ?? []).flatMap((f) => {
       const m = mapByCode.get(f.account_code);
-      if (!m || !m.active || m.nature === "nao_definido") return [];
+      if (!m || !m.active || m.statement_type !== "resultado" || m.nature === "nao_definido") return [];
       return [
         {
           entry_date: f.period,
@@ -81,7 +96,7 @@ export const getDreData = createServerFn({ method: "GET" })
       (facts ?? [])
         .filter((f) => {
           const m = mapByCode.get(f.account_code);
-          return !m || m.nature === "nao_definido";
+          return !m || m.statement_type !== "resultado" || m.nature === "nao_definido";
         })
         .map((f) => f.account_code),
     ).size;
@@ -89,8 +104,69 @@ export const getDreData = createServerFn({ method: "GET" })
     return {
       rows: [...(rows ?? []), ...factRows],
       unmappedAccounts,
-      pendingCount: pendingRows?.length ?? 0,
+      pendingCount: pendingList.length,
+      pendingEntryCount: pendingEntries.length,
+      pendingEntryTotal,
+      pendingExitCount: pendingExits.length,
+      pendingExitTotal,
       dimensions: [...new Set((dimensionRows ?? []).map((d) => d.cost_center!).filter(Boolean))].sort(),
+    };
+  });
+
+export const getClientDataRange = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ clientId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const [firstEntryResult, lastEntryResult, firstFactResult, lastFactResult] = await Promise.all([
+      context.supabase
+        .from("entries")
+        .select("entry_date")
+        .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
+        .in("status", ["auto", "confirmado", "sugerido"])
+        .order("entry_date", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("entries")
+        .select("entry_date")
+        .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
+        .in("status", ["auto", "confirmado", "sugerido"])
+        .order("entry_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("dre_facts")
+        .select("period")
+        .eq("client_id", data.clientId)
+        .order("period", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      context.supabase
+        .from("dre_facts")
+        .select("period")
+        .eq("client_id", data.clientId)
+        .order("period", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const errors = [firstEntryResult.error, lastEntryResult.error, firstFactResult.error, lastFactResult.error].filter(Boolean);
+    if (errors.length > 0) throw new Error(errors[0]!.message);
+
+    const candidatesFrom = [firstEntryResult.data?.entry_date, firstFactResult.data?.period].filter(
+      (value): value is string => Boolean(value),
+    );
+    const candidatesTo = [lastEntryResult.data?.entry_date, lastFactResult.data?.period].filter(
+      (value): value is string => Boolean(value),
+    );
+
+    if (candidatesFrom.length === 0 || candidatesTo.length === 0) return null;
+
+    return {
+      from: candidatesFrom.sort()[0]!,
+      to: candidatesTo.sort().at(-1)!,
     };
   });
 
@@ -117,6 +193,7 @@ export const getComparisonData = createServerFn({ method: "GET" })
         .from("entries")
         .select("entry_date, amount, nature, behavior, account")
         .eq("client_id", data.clientId)
+        .eq("statement_type", "resultado")
         .in("status", ["auto", "confirmado", "sugerido"])
         .gte("entry_date", range.from)
         .lte("entry_date", range.to)
@@ -129,7 +206,6 @@ export const getComparisonData = createServerFn({ method: "GET" })
     return result;
   });
 
-/** Drill-down: do valor agregado até os lançamentos de origem (spec §18). */
 export const drilldownEntries = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
@@ -149,6 +225,7 @@ export const drilldownEntries = createServerFn({ method: "GET" })
       .from("entries")
       .select("id, entry_date, description, counterparty, amount, account, area, status, confidence, classification_source, original_category")
       .eq("client_id", data.clientId)
+      .eq("statement_type", "resultado")
       .eq("nature", data.nature as never)
       .in("status", ["auto", "confirmado", "sugerido"])
       .gte("entry_date", data.from)

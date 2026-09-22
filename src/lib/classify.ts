@@ -38,6 +38,8 @@ export interface Classification {
   status: "auto" | "sugerido" | "pendente";
 }
 
+export type MovementDirection = "entrada" | "saida";
+
 export const normalize = (s: string | null | undefined) =>
   (s ?? "")
     .normalize("NFD")
@@ -47,8 +49,86 @@ export const normalize = (s: string | null | undefined) =>
     .replace(/\s+/g, " ")
     .trim();
 
-export const historyKey = (e: { description: string; counterparty: string | null }) =>
-  normalize(e.counterparty) || normalize(e.description).split(" ").slice(0, 4).join(" ");
+function cleanExtractedCounterparty(value: string): string {
+  return normalize(value.replace(/\s+\d{2}\/\d{2}\s*$/, ""));
+}
+
+/**
+ * Direcao economica inferida apenas quando o proprio historico bancario a
+ * declara de forma suficientemente clara. Evitamos inferir por sinal/valor
+ * aqui porque historyKey tambem e usado em contextos sem amount disponivel.
+ */
+export function movementDirectionFromDescription(description: string): MovementDirection | null {
+  const raw = normalize(description);
+  if (!raw) return null;
+
+  if (
+    raw.startsWith("PIX RECEBIDO REM ") ||
+    raw.startsWith("TED TRANSF ELET DISPON REMET ") ||
+    raw.startsWith("RECEBIMENTO PIX ")
+  ) {
+    return "entrada";
+  }
+
+  if (
+    raw.startsWith("PIX ENVIADO DES ") ||
+    raw.startsWith("PIX QR CODE DINAMICO DES ") ||
+    raw.startsWith("PIX QR CODE ESTATICO DES ") ||
+    raw.startsWith("COMPRA CARTAO VISA ") ||
+    raw.startsWith("CARTAO VISA ELECTRON ") ||
+    raw.startsWith("PAGTO ELETRON COBRANCA ") ||
+    raw.startsWith("PAGAMENTO PIX ") ||
+    raw.startsWith("PAGAMENTO BOLETO ")
+  ) {
+    return "saida";
+  }
+
+  return null;
+}
+
+/**
+ * Extrai a contraparte quando ela vem embutida no historico bancario.
+ * Mantemos esta logica junto do historyKey para que treinamento e futuras
+ * importacoes usem exatamente a mesma identidade historica.
+ */
+export function counterpartyFromDescription(description: string): string | null {
+  const raw = (description ?? "").trim();
+  if (!raw) return null;
+
+  const patterns = [
+    /^PIX\s+QR\s+CODE\s+DINAMICO\s+DES:\s*(.+)$/i,
+    /^PIX\s+QR\s+CODE\s+ESTATICO\s+DES:\s*(.+)$/i,
+    /^PIX\s+ENVIADO\s+DES:\s*(.+)$/i,
+    /^PIX\s+RECEBIDO\s+REM:\s*(.+)$/i,
+    /^TED-TRANSF\s+ELET\s+DISPON\s+REMET\.\s*(.+)$/i,
+    /^COMPRA\s+CARTAO\s+VISA\s+(.+)$/i,
+    /^CARTAO\s+VISA\s+ELECTRON\s+(.+)$/i,
+    /^PAGTO\s+ELETRON\s+COBRANCA\s+(.+)$/i,
+    /^PAGAMENTO\s+PIX\s+-\s*(.+)$/i,
+    /^RECEBIMENTO\s+PIX\s+-\s*(.+)$/i,
+    /^PAGAMENTO\s+BOLETO\s+-\s*(.+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match?.[1]) continue;
+    const candidate = cleanExtractedCounterparty(match[1]);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
+export function historyKey(e: { description: string; counterparty: string | null }): string {
+  const direction = movementDirectionFromDescription(e.description);
+  const counterparty = normalize(e.counterparty) || counterpartyFromDescription(e.description);
+
+  if (counterparty) return direction ? `${direction.toUpperCase()}|${counterparty}` : counterparty;
+
+  const fallback = normalize(e.description).split(" ").slice(0, 4).join(" ");
+  if (!fallback) return "";
+  return direction ? `${direction.toUpperCase()}|${fallback}` : fallback;
+}
 
 export function statusFor(confidence: number): Classification["status"] {
   if (confidence >= 0.85) return "auto";
@@ -81,11 +161,11 @@ function matches(rule: RuleLike, entry: RawEntry): boolean {
 /**
  * Ordem de prioridade (spec §11):
  * 1. regra confirmada do cliente
- * 2. histórico do cliente
+ * 2. historico do cliente
  * 3. regra do segmento
  * 4. regra geral Resultados
- * 5. correspondência por fornecedor
- * 6. correspondência por descrição
+ * 5. correspondencia por fornecedor
+ * 6. correspondencia por descricao
  * 7. IA (aplicada fora deste motor)
  */
 export function classifyEntry(
@@ -142,7 +222,7 @@ export function classifyEntry(
   return PENDING;
 }
 
-/** Impressão digital determinística para prevenção de duplicidade (spec §8). */
+/** Impressao digital deterministica para prevencao de duplicidade (spec §8). */
 export function fingerprint(parts: (string | number | null | undefined)[]): string {
   const input = parts.map((p) => normalize(String(p ?? ""))).join("|");
   let h1 = 0x811c9dc5;
