@@ -160,13 +160,38 @@ export function guessMapping(columns: string[]): Partial<Record<StandardField, s
 
 export function parseNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
-  if (typeof value === "number") return value;
-  let s = String(value).trim().replace(/[R$\s]/g, "");
-  const negative = /^\(.*\)$/.test(s) || s.startsWith("-");
-  s = s.replace(/[()\-]/g, "");
-  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
-  const n = Number(s.replace(/[^0-9.]/g, ""));
-  if (Number.isNaN(n)) return 0;
+  // Célula já numérica (raw do Excel): usar o valor bruto, sem parsing de string.
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value instanceof Date) return 0;
+
+  let s = String(value).trim().replace(/[R$\s\u00a0]/gi, "");
+  if (!s) return 0;
+  const negative = /^\(.*\)$/.test(s) || s.startsWith("-") || /-$/.test(s);
+  s = s.replace(/[()]/g, "").replace(/-/g, "");
+  s = s.replace(/[^0-9.,]/g, "");
+  if (!s) return 0;
+
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  const lastSep = Math.max(lastComma, lastDot);
+
+  let intPart = s;
+  let decPart = "";
+  if (lastSep >= 0) {
+    const decimals = s.length - lastSep - 1;
+    const onlyOneSep =
+      (lastComma === -1) !== (lastDot === -1) && s.indexOf(",") === lastComma && s.indexOf(".") === lastDot;
+    // Separador único com exatamente 3 dígitos após: milhar (ex.: "1.500" / "1,500").
+    const isThousand = onlyOneSep && decimals === 3;
+    if (!isThousand && decimals > 0 && decimals <= 3) {
+      intPart = s.slice(0, lastSep);
+      decPart = s.slice(lastSep + 1);
+    }
+  }
+
+  const n = Number(`${intPart.replace(/[.,]/g, "") || "0"}${decPart ? `.${decPart}` : ""}`);
+  if (!Number.isFinite(n)) return 0;
   return negative ? -n : n;
 }
 

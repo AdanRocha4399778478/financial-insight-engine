@@ -124,6 +124,16 @@ funcionou" com outro caso não é confirmação suficiente.
   side-effect disparado no corpo de render em vez de `useEffect` em algum
   componente da rota `clientes.$clientId.dre`. Investigar antes do próximo
   trabalho nessa tela.
+- **Vulnerabilidades de dependências (npm audit, 22/09/2026)**, sem relação com
+  o merge de `feat/import-balance-integrity` — pré-existentes, encontradas ao
+  rodar `npm install` durante a validação do PR #4:
+  - `js-yaml` 4.0.0–4.3.1: alta severidade, "maxTotalMergeKeys does not limit
+    CPU use for empty merge sources" — corrigível via `npm audit fix`.
+  - `xlsx` (todas as versões atuais): alta severidade, Prototype Pollution e
+    ReDoS na SheetJS — **sem fix disponível** via npm; `xlsx` é dependência
+    direta do parser de importação (`parse-file.ts`), então trocar de
+    biblioteca exige avaliação cuidadosa, não é um bump trivial.
+  Investigar depois, não bloqueia este merge.
 
 ## Ambiente / infraestrutura
 
