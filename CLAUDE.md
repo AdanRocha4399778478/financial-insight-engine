@@ -133,6 +133,13 @@ funcionou" com outro caso não é confirmação suficiente.
     ReDoS na SheetJS — **sem fix disponível** via npm; `xlsx` é dependência
     direta do parser de importação (`parse-file.ts`), então trocar de
     biblioteca exige avaliação cuidadosa, não é um bump trivial.
+- **Erro 404 residual em toda página**, notado em 22/09/2026 durante validação
+  do PR #4: exatamente uma requisição retorna 404 no console em todo
+  carregamento de página, em qualquer rota — ocorrência única, não cresce
+  com navegação ou ações, não identificada ainda (o console não expõe a URL
+  do recurso), não bloqueia nenhuma funcionalidade. Confirmado pré-existente
+  ao merge de hoje (mesmo padrão observado em testes anteriores ao merge).
+  Investigar a origem quando houver tempo.
   Investigar depois, não bloqueia este merge.
 
 ## Ambiente / infraestrutura
