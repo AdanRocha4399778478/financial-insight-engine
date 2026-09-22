@@ -86,6 +86,12 @@ async function main() {
   if (!supabaseUrl || !publishableKey) {
     throw new Error("SUPABASE_URL/SUPABASE_PUBLISHABLE_KEY nao encontrados no .env.");
   }
+  const EXPECTED_PROJECT_REF = "snbstfomarqtcxzucdvh";
+  if (!supabaseUrl.includes(EXPECTED_PROJECT_REF)) {
+    throw new Error(
+      `SUPABASE_URL aponta para um projeto inesperado (${supabaseUrl}). Esperado: projeto ${EXPECTED_PROJECT_REF}. Abortando para evitar gravar no banco errado.`,
+    );
+  }
   if (!email || !password) {
     throw new Error("Defina TEST_SUPABASE_EMAIL e TEST_SUPABASE_PASSWORD nesta sessao.");
   }
