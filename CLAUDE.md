@@ -100,6 +100,17 @@ funcionou" com outro caso não é confirmação suficiente.
   (OpenAI ou Google Gemini) ou ficar desligado até decisão.
 - SMTP de e-mail não configurado — usando o padrão do Supabase, com rate limit
   muito baixo para uso real (recuperação de senha, convite de usuário).
+- **[Importante] Warning de ciclo de vida do React na tela de DRE**, encontrado
+  em 22/09/2026 durante validação do PR #4 (`feat/import-balance-integrity`):
+  console mostra `Can't perform a React state update on a component that
+  hasn't mounted yet. This indicates that you have a side-effect in your
+  render function that asynchronously tries to update the component. Move
+  this work to useEffect instead.` Intermitente — reproduziu em recarregamento
+  limpo da DRE do Bandrones, não reproduziu no mesmo teste no Grupo Erinho. Não
+  bloqueia o render (os números da DRE aparecem corretos), mas indica um
+  side-effect disparado no corpo de render em vez de `useEffect` em algum
+  componente da rota `clientes.$clientId.dre`. Investigar antes do próximo
+  trabalho nessa tela.
 
 ## Ambiente / infraestrutura
 
