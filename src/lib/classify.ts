@@ -64,7 +64,8 @@ export function movementDirectionFromDescription(description: string): MovementD
 
   if (
     raw.startsWith("PIX RECEBIDO REM ") ||
-    raw.startsWith("TED TRANSF ELET DISPON REMET ")
+    raw.startsWith("TED TRANSF ELET DISPON REMET ") ||
+    raw.startsWith("RECEBIMENTO PIX ")
   ) {
     return "entrada";
   }
@@ -75,7 +76,9 @@ export function movementDirectionFromDescription(description: string): MovementD
     raw.startsWith("PIX QR CODE ESTATICO DES ") ||
     raw.startsWith("COMPRA CARTAO VISA ") ||
     raw.startsWith("CARTAO VISA ELECTRON ") ||
-    raw.startsWith("PAGTO ELETRON COBRANCA ")
+    raw.startsWith("PAGTO ELETRON COBRANCA ") ||
+    raw.startsWith("PAGAMENTO PIX ") ||
+    raw.startsWith("PAGAMENTO BOLETO ")
   ) {
     return "saida";
   }
@@ -101,6 +104,9 @@ export function counterpartyFromDescription(description: string): string | null 
     /^COMPRA\s+CARTAO\s+VISA\s+(.+)$/i,
     /^CARTAO\s+VISA\s+ELECTRON\s+(.+)$/i,
     /^PAGTO\s+ELETRON\s+COBRANCA\s+(.+)$/i,
+    /^PAGAMENTO\s+PIX\s+-\s*(.+)$/i,
+    /^RECEBIMENTO\s+PIX\s+-\s*(.+)$/i,
+    /^PAGAMENTO\s+BOLETO\s+-\s*(.+)$/i,
   ];
 
   for (const pattern of patterns) {
