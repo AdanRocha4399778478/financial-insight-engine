@@ -32,7 +32,7 @@ const CATEGORY_MAPPING: Record<string, CategoryMapping> = {
   "CUSTO DE MERCADORIA VENDIDA": { nature: "custo", behavior: "variavel" },
   "DESPESAS FIXAS": { nature: "despesa", behavior: "fixo" },
   "DESPESAS VARIAVEIS": { nature: "despesa", behavior: "variavel" },
-  "PRO LABORE": { nature: "despesa", behavior: "fixo" },
+  "PRO LABORE": { nature: "despesa", behavior: "variavel" },
   "OUTRAS DESPESAS": { nature: "despesa", behavior: "nao_definido" },
   "EXCLUSO DRE": { nature: "excluido", behavior: "nao_aplicavel" },
 

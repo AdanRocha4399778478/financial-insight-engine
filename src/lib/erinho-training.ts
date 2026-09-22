@@ -43,7 +43,7 @@ const CATEGORY_MAPPING: Record<string, CategoryMapping> = {
   "CUSTO DE MERCADORIA VENDIDA": { nature: "custo", behavior: "variavel" },
   "DESPESAS FIXAS": { nature: "despesa", behavior: "fixo" },
   "DESPESAS VARIAVEIS": { nature: "despesa", behavior: "variavel" },
-  "PRO LABORE": { nature: "despesa", behavior: "fixo" },
+  "PRO LABORE": { nature: "despesa", behavior: "variavel" },
   "OUTRAS DESPESAS": { nature: "outra_despesa", behavior: "nao_definido" },
   "DESPESA FINANCEIRA": { nature: "despesa_financeira", behavior: "nao_aplicavel" },
   "JUROS FINANCEIROS": { nature: "despesa_financeira", behavior: "nao_aplicavel" },
