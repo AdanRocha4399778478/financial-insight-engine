@@ -1,10 +1,12 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/hooks/use-theme";
 
 export function TopBar({ email, isAdmin }: { email?: string | null | undefined; isAdmin?: boolean | undefined }) {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="border-b border-border bg-background">
@@ -20,6 +22,14 @@ export function TopBar({ email, isAdmin }: { email?: string | null | undefined; 
               {isAdmin ? " · admin" : ""}
             </span>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="sm"
