@@ -94,33 +94,21 @@ function DrePage() {
     queryFn: () => fetchDataRange({ data: { clientId } }),
   });
 
-  // eslint-disable-next-line no-console
-  console.log(
-    `[DEBUG render] range=${range.from}..${range.to} periodFilterRange=${periodFilter.range.from}..${periodFilter.range.to} period=${periodFilter.period.year}-${periodFilter.period.month}`,
-  );
-
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[DEBUG sync-effect] periodFilterRange=${periodFilter.range.from}..${periodFilter.range.to}`,
-    );
     setRange(periodFilter.range);
   }, [periodFilter.range]);
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, dimension],
-    queryFn: () => {
-      // eslint-disable-next-line no-console
-      console.log(`[DEBUG dre-queryFn-fired] from=${range.from} to=${range.to}`);
-      return fetchDre({
+    queryFn: () =>
+      fetchDre({
         data: {
           clientId,
           from: range.from,
           to: range.to,
           dimension: dimension === ALL ? null : dimension,
         },
-      });
-    },
+      }),
   });
 
   const imports = useQuery({
