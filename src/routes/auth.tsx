@@ -7,6 +7,7 @@ import { googleOAuthCredentials } from "@/lib/google-oauth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandMark } from "@/components/brand-mark";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -103,10 +104,7 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-primary" />
-          <span className="font-display text-lg font-bold tracking-tight">Resultados S/A</span>
-        </div>
+        <BrandMark />
         <h1 className="mt-8 font-display text-2xl font-bold tracking-tight">
           {mode === "login" ? "Entrar na plataforma" : "Criar acesso"}
         </h1>
