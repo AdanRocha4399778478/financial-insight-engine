@@ -141,20 +141,21 @@ funcionou" com outro caso não é confirmação suficiente.
   ao merge de hoje (mesmo padrão observado em testes anteriores ao merge).
   Investigar a origem quando houver tempo.
   Investigar depois, não bloqueia este merge.
-- **35 migrations aplicadas diretamente em produção entre 21/09 e 22/09
-  (classificação/regras de Bandrones e Grupo Erinho) não têm arquivo
-  correspondente neste repositório** — histórico de migrations local e
-  remoto divergem. Descoberto em 22/09/2026 via
-  `supabase migration list --project-ref snbstfomarqtcxzucdvh` durante o
-  gate 7 do PR #4: as 3 migrations esperadas por este merge já estavam
-  aplicadas, mas a listagem também mostrou 35 timestamps remotos (`local: ""`)
-  sem arquivo local, de `2026-09-21 18:08:14` a `2026-09-22 03:16:30`.
-  `supabase db pull` recusou puxar o diff por causa dessa divergência e
-  sugeriu `supabase migration repair --status reverted <timestamp>` para
-  cada uma das 35. **Reconciliar com `supabase migration repair` fica
-  pendente de decisão explícita do Adan, não deve ser rodado sem
-  autorização** — é uma ação que reescreve a tabela de controle de
-  migrations em produção, não uma leitura.
+- ~~35 migrations aplicadas diretamente em produção entre 21/09 e 22/09
+  sem arquivo correspondente neste repositório~~ **Reparado em 23/09/2026,
+  bookkeeping apenas, sem alteração de dado.** Descoberto em 22/09/2026 via
+  `supabase migration list` durante o gate 7 do PR #4 (35 timestamps
+  remotos de `2026-09-21 18:08:14` a `2026-09-22 03:16:30`, sem arquivo
+  local). Investigação confirmou que eram infraestrutura gerenciada pelo
+  próprio Supabase (função `rls_auto_enable()` — habilita RLS
+  automaticamente em tabelas novas do schema `public` — e triggers de
+  proteção de `storage.buckets`), não mudanças feitas por alguém da
+  equipe. Reparo: `supabase migration repair --status reverted` nas 35
+  versões (autorizado por Adan), seguido de `supabase db pull`, que gerou
+  `supabase/migrations/20260923025752_remote_schema.sql` capturando esse
+  estado. `supabase migration list` confirmou local e remoto batendo, sem
+  órfãs. Nenhum dado ou tabela de aplicação (`clients`, `entries`,
+  `dre_facts`, `classification_audit` etc.) foi tocado.
 - **Tela "Visão geral" mostrou dados zerados momentaneamente em produção**,
   notado em 22/09/2026 no recheque pós-deploy do PR #4: Visão geral do
   Bandrones mostrou 0 lançamentos/0 pendências momentaneamente em produção,
