@@ -63,6 +63,8 @@ function PatrimonialClassificationPage() {
   });
 
   const rows = entries.data?.rows ?? [];
+  const totalMatching = entries.data?.totalMatching ?? rows.length;
+  const hiddenByLimit = totalMatching - rows.length;
   const allSelected = rows.length > 0 && selected.length === rows.length;
 
   const classify = useMutation({
@@ -168,6 +170,13 @@ function PatrimonialClassificationPage() {
           </span>
         </div>
       </section>
+
+      {hiddenByLimit > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive">
+          Mostrando {rows.length} de {totalMatching} pendência(s) patrimoniais que casam com este
+          filtro — {hiddenByLimit} não aparecem aqui. Refine a busca para revisar todas.
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-left text-sm">
