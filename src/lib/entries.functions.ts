@@ -29,25 +29,50 @@ export const listEntries = createServerFn({ method: "GET" })
         search: z.string().max(120).nullable(),
         entryIds: z.array(z.string().uuid()).max(5000).nullable().default(null),
         importId: z.string().uuid().nullable(),
+        from: z.string().max(10).nullable().default(null),
+        to: z.string().max(10).nullable().default(null),
         limit: z.number().min(1).max(500).default(200),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    let query = context.supabase
-      .from("entries")
-      .select("*")
-      .eq("client_id", data.clientId)
-      .order("entry_date", { ascending: false })
-      .limit(data.limit);
+    function applyFilters<T>(queryIn: T): T {
+      let query = queryIn as any;
+      if (data.status && data.status !== "todos") query = query.eq("status", data.status as never);
+      // Pendentes nunca são filtrados por período: um pendente antigo não pode
+      // ficar escondido por navegação de mês.
+      if (data.status !== "pendente") {
+        if (data.from) query = query.gte("entry_date", data.from);
+        if (data.to) query = query.lte("entry_date", data.to);
+      }
+      if (data.importId) query = query.eq("import_id", data.importId);
+      if (data.entryIds?.length) query = query.in("id", data.entryIds);
+      else if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
+      return query as T;
+    }
 
-    if (data.status && data.status !== "todos") query = query.eq("status", data.status as never);
-    if (data.importId) query = query.eq("import_id", data.importId);
-    if (data.entryIds?.length) query = query.in("id", data.entryIds);
-    else if (data.search) query = query.or(`description.ilike.%${data.search}%,counterparty.ilike.%${data.search}%`);
+    const query = applyFilters(
+      context.supabase
+        .from("entries")
+        .select("*")
+        .eq("client_id", data.clientId)
+        .order("entry_date", { ascending: false })
+        .limit(data.limit),
+    );
 
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
+
+    // Total real que casa com o filtro atual, sem o corte de `limit` — a UI
+    // precisa saber se está escondendo lançamentos automáticos/confirmados
+    // sem avisar.
+    const { count: totalMatching, error: totalError } = await applyFilters(
+      context.supabase
+        .from("entries")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", data.clientId),
+    );
+    if (totalError) throw new Error(totalError.message);
 
     const { data: counts, error: countError } = await context.supabase
       .from("entries")
@@ -61,7 +86,7 @@ export const listEntries = createServerFn({ method: "GET" })
       summary.total += 1;
       summary[c.status as keyof typeof summary] += 1;
     }
-    return { rows: rows ?? [], summary };
+    return { rows: rows ?? [], summary, totalMatching: totalMatching ?? 0 };
   });
 
 async function writeAudit(

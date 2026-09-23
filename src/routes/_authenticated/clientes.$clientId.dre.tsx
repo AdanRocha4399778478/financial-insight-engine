@@ -15,6 +15,8 @@ import {
   type Nature,
 } from "@/lib/finance";
 import { ImportIntegrityStatus, type IntegrityStatus } from "@/components/import-integrity-status";
+import { PeriodNav } from "@/components/period-nav";
+import { usePeriodFilter, type DateRange } from "@/hooks/use-period-filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,14 +53,6 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/dre")({
 });
 
 const ALL = "__all__";
-type DateRange = { from: string; to: string };
-
-function fallbackRange(): DateRange {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-}
 
 function monthRange(date: Date): DateRange {
   const from = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -81,12 +75,6 @@ function yearRange(): DateRange {
   };
 }
 
-function validRange(value: unknown): value is DateRange {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as DateRange;
-  return /^\d{4}-\d{2}-\d{2}$/.test(candidate.from) && /^\d{4}-\d{2}-\d{2}$/.test(candidate.to);
-}
-
 function DrePage() {
   const { clientId } = Route.useParams();
   const fetchDre = useServerFn(getDreData);
@@ -94,8 +82,8 @@ function DrePage() {
   const fetchImports = useServerFn(listImports);
   const fetchDataRange = useServerFn(getClientDataRange);
 
-  const [range, setRange] = useState<DateRange>(fallbackRange);
-  const [readyClientId, setReadyClientId] = useState<string | null>(null);
+  const periodFilter = usePeriodFilter(clientId);
+  const [range, setRange] = useState<DateRange>(() => periodFilter.range);
   const [dimension, setDimension] = useState(ALL);
   const [drill, setDrill] = useState<{ nature: Nature; account: string | null; label: string } | null>(
     null,
@@ -107,48 +95,8 @@ function DrePage() {
   });
 
   useEffect(() => {
-    if (readyClientId === clientId || dataRange.isLoading) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const urlRange = { from: params.get("from") ?? "", to: params.get("to") ?? "" };
-    if (validRange(urlRange)) {
-      setRange(urlRange);
-      setReadyClientId(clientId);
-      return;
-    }
-
-    try {
-      const saved = window.localStorage.getItem(`dre-range:${clientId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved) as unknown;
-        if (validRange(parsed)) {
-          setRange(parsed);
-          setReadyClientId(clientId);
-          return;
-        }
-      }
-    } catch {
-      // localStorage indisponível ou valor antigo inválido: segue para o período inteligente.
-    }
-
-    setRange(dataRange.data ?? fallbackRange());
-    setReadyClientId(clientId);
-  }, [clientId, dataRange.data, dataRange.isLoading, readyClientId]);
-
-  useEffect(() => {
-    if (readyClientId !== clientId) return;
-
-    try {
-      window.localStorage.setItem(`dre-range:${clientId}`, JSON.stringify(range));
-    } catch {
-      // Persistência local é conveniência, não requisito para carregar a DRE.
-    }
-
-    const url = new URL(window.location.href);
-    url.searchParams.set("from", range.from);
-    url.searchParams.set("to", range.to);
-    window.history.replaceState(window.history.state, "", url.toString());
-  }, [clientId, range, readyClientId]);
+    setRange(periodFilter.range);
+  }, [periodFilter.range]);
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, dimension],
@@ -282,6 +230,14 @@ function DrePage() {
     </div>
 
     <div className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border pb-4 mb-4">
+          <span className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">Navegar por mês</span>
+          <PeriodNav
+            period={periodFilter.period}
+            onNext={periodFilter.nextMonth}
+            onPrevious={periodFilter.previousMonth}
+          />
+        </div>
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
             <Label htmlFor="from">De</Label>

@@ -17,6 +17,8 @@ import { rejectSuggestions } from "@/lib/reject-suggestions.functions";
 import { reclassifyPendingFromLearning } from "@/lib/reclassify-training.functions";
 import { listPendingIdentitySummary } from "@/lib/pending-identities.functions";
 import { diagnoseTrainingMatchGaps } from "@/lib/training-match-diagnostics.functions";
+import { usePeriodFilter } from "@/hooks/use-period-filter";
+import { PeriodNav } from "@/components/period-nav";
 import {
   BALANCE_GROUPS,
   BALANCE_GROUP_LABEL,
@@ -111,6 +113,7 @@ function ClassificationPage() {
   const askAI = useServerFn(suggestWithAI);
   const reprocessLearning = useServerFn(reclassifyPendingFromLearning);
 
+  const periodFilter = usePeriodFilter(clientId);
   const [status, setStatus] = useState("pendente");
   const [search, setSearch] = useState("");
   const [paretoEntryIds, setParetoEntryIds] = useState<string[] | null>(null);
@@ -132,7 +135,7 @@ function ClassificationPage() {
   const [rulePattern, setRulePattern] = useState("");
 
   const entries = useQuery({
-    queryKey: ["entries", clientId, status, search, paretoEntryIds],
+    queryKey: ["entries", clientId, status, search, paretoEntryIds, periodFilter.range],
     queryFn: () =>
       fetchEntries({
         data: {
@@ -141,6 +144,9 @@ function ClassificationPage() {
           search: paretoEntryIds ? null : search.trim() || null,
           entryIds: paretoEntryIds,
           importId: null,
+          // Pendentes nunca são filtrados por período (ver entries.functions.ts).
+          from: periodFilter.range.from,
+          to: periodFilter.range.to,
           limit: 200,
         },
       }),
@@ -158,6 +164,8 @@ function ClassificationPage() {
 
   const rows = entries.data?.rows ?? [];
   const summary = entries.data?.summary;
+  const totalMatching = entries.data?.totalMatching ?? rows.length;
+  const hiddenByLimit = totalMatching - rows.length;
   const visibleRows = showAllRows || paretoEntryIds || search.trim() ? rows : rows.slice(0, 10);
   const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selected.includes(row.id));
 
@@ -384,6 +392,11 @@ function ClassificationPage() {
               ))}
             </SelectContent>
           </Select>
+          <PeriodNav
+            period={periodFilter.period}
+            onNext={periodFilter.nextMonth}
+            onPrevious={periodFilter.previousMonth}
+          />
           <Input
             value={search}
             maxLength={120}
@@ -541,6 +554,14 @@ function ClassificationPage() {
               )}
             </div>
           </div>
+
+          {hiddenByLimit > 0 && (
+            <div className="border-b border-border bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive">
+              Mostrando {rows.length} de {totalMatching} lançamento(s) que casam com este filtro —{" "}
+              {hiddenByLimit} não aparecem aqui. Refine a busca ou navegue por um período mais curto para
+              revisar todos.
+            </div>
+          )}
 
           <div className={showAllRows ? "max-h-[68vh] overflow-auto" : "overflow-auto"}>
             <table className="w-full text-left text-sm">

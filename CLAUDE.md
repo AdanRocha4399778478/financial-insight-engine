@@ -163,6 +163,9 @@ funcionou" com outro caso não é confirmação suficiente.
   sequência. Causa não identificada — pode ou não ser o mesmo bug de ciclo
   de vida já registrado na DRE. Investigar antes de confiar na Visão geral
   como fonte de verdade rápida.
+- **Grupo Erinho tem 294 lançamentos automáticos em julho/2026**, acima do
+  limite de 200 por consulta — corte agora é visível via banner, mas
+  paginação real continua pendente como melhoria futura, não bug.
 
 ## Ambiente / infraestrutura
 
