@@ -103,6 +103,17 @@ export interface DreFactRow {
   source_row?: number | undefined;
 }
 
+/**
+ * Identidade estável da conta para deduplicação e fingerprint.
+ * Usa o código quando ele continua informativo após normalização; códigos apenas
+ * simbólicos (ex.: "*" ou "+") usam o nome da conta como fallback.
+ */
+export function dreAccountIdentity(
+  fact: Pick<DreFactRow, "account_code" | "account_name">,
+): string {
+  return normalize(fact.account_code) || normalize(fact.account_name);
+}
+
 export interface DreFactConflict {
   account_code: string;
   account_name: string;
@@ -125,12 +136,12 @@ export interface DreParseResult {
   conflicts: DreFactConflict[];
 }
 
-/** Garante no máximo um fato por (conta, período). Idênticos são removidos; divergentes viram conflito. */
+/** Garante no máximo um fato por identidade final da conta + período. */
 export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
   const groups = new Map<string, DreFactRow[]>();
   const order: string[] = [];
   for (const fact of facts) {
-    const key = `${fact.account_code}::${fact.period}`;
+    const key = `${dreAccountIdentity(fact)}::${fact.period}`;
     const bucket = groups.get(key);
     if (bucket) bucket.push(fact);
     else {
@@ -150,7 +161,7 @@ export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
       out.push(first);
       continue;
     }
-    const distinct = [...new Set(bucket.map((f) => round2(f.amount)))];
+    const distinct = [...new Set(bucket.map((f) => f.amount))];
     if (distinct.length === 1) {
       duplicatesRemoved += bucket.length - 1;
       out.push(first);
@@ -166,10 +177,6 @@ export function dedupeDreFacts(facts: DreFactRow[]): DreDedupeResult {
   }
 
   return { facts: out, duplicatesRemoved, conflicts };
-}
-
-function round2(value: number) {
-  return Math.round(value * 100) / 100;
 }
 
 export function buildDreFacts(
@@ -216,4 +223,3 @@ export function buildDreFacts(
     conflicts,
   };
 }
-
