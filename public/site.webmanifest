@@ -1,0 +1,16 @@
+{
+  "name": "Resultados S/A — Inteligência Financeira Gerencial",
+  "short_name": "Resultados S/A",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#dcff00",
+  "icons": [
+    {
+      "src": "/brand/resultados-icon-dark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
