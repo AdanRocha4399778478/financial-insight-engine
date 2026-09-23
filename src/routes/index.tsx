@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, FileSpreadsheet, GitBranch, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/brand-mark";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -50,10 +51,7 @@ function Landing() {
   return (
     <div className="min-h-screen bg-background">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-primary" />
-          <span className="font-display text-lg font-bold tracking-tight">Resultados S/A</span>
-        </div>
+        <BrandMark />
         <Button asChild variant="ghost" size="sm">
           <Link to="/auth">Entrar</Link>
         </Button>
