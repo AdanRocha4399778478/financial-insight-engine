@@ -87,6 +87,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Plataforma da Resultados S/A que transforma arquivos financeiros em DRE gerencial confiável, com classificação automática, pendências controladas e rastreabilidade total.",
       },
       { name: "author", content: "Resultados S/A" },
+      { name: "theme-color", content: "#ffffff", media: "(prefers-color-scheme: light)" },
+      { name: "theme-color", content: "#000000", media: "(prefers-color-scheme: dark)" },
       { property: "og:title", content: "Resultados S/A — Inteligência Financeira Gerencial" },
       {
         property: "og:description",
@@ -103,7 +105,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      {
+        rel: "icon",
+        href: "/brand/resultados-icon-light.svg",
+        type: "image/svg+xml",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        rel: "icon",
+        href: "/brand/resultados-icon-dark.svg",
+        type: "image/svg+xml",
+        media: "(prefers-color-scheme: dark)",
+      },
+      { rel: "manifest", href: "/site.webmanifest" },
+      {
+        rel: "apple-touch-icon",
+        href: "/brand/resultados-icon-dark.svg",
+      },
     ],
   }),
   shellComponent: RootShell,
