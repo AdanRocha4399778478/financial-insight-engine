@@ -155,6 +155,13 @@ funcionou" com outro caso não é confirmação suficiente.
   pendente de decisão explícita do Adan, não deve ser rodado sem
   autorização** — é uma ação que reescreve a tabela de controle de
   migrations em produção, não uma leitura.
+- **Tela "Visão geral" mostrou dados zerados momentaneamente em produção**,
+  notado em 22/09/2026 no recheque pós-deploy do PR #4: Visão geral do
+  Bandrones mostrou 0 lançamentos/0 pendências momentaneamente em produção,
+  logo após o deploy; Governança e DRE confirmaram dados corretos na
+  sequência. Causa não identificada — pode ou não ser o mesmo bug de ciclo
+  de vida já registrado na DRE. Investigar antes de confiar na Visão geral
+  como fonte de verdade rápida.
 
 ## Ambiente / infraestrutura
 
