@@ -3,6 +3,7 @@ import { LogOut, Moon, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
+import { BrandMark } from "@/components/brand-mark";
 
 export function TopBar({ email, isAdmin }: { email?: string | null | undefined; isAdmin?: boolean | undefined }) {
   const navigate = useNavigate();
@@ -11,9 +12,8 @@ export function TopBar({ email, isAdmin }: { email?: string | null | undefined; 
   return (
     <header className="border-b border-border bg-background">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <Link to="/clientes" className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-primary" />
-          <span className="font-display text-base font-bold tracking-tight">Resultados S/A</span>
+        <Link to="/clientes" aria-label="Resultados S/A — Clientes">
+          <BrandMark className="h-6 sm:h-8" />
         </Link>
         <div className="flex items-center gap-4">
           {email && (

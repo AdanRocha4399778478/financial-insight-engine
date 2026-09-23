@@ -1,15 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <defs>
-    <filter id="resultados-lime" x="0" y="0" width="100%" height="100%">
-      <feFlood flood-color="#dcff00" result="brandColor"/>
-      <feComposite in="brandColor" in2="SourceAlpha" operator="in"/>
-    </filter>
-  </defs>
-  <image
-    href="/brand/resultados-icon-light.svg"
-    width="128"
-    height="128"
-    preserveAspectRatio="xMidYMid meet"
-    filter="url(#resultados-lime)"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 479 432">
+  <image href="resultados-icon-dark.png" width="479" height="432" />
 </svg>

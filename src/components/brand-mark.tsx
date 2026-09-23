@@ -1,28 +1,36 @@
 type BrandMarkProps = {
   className?: string;
-  compact?: boolean;
+  variant?: "full" | "icon";
 };
 
-export function BrandMark({ className = "", compact = false }: BrandMarkProps) {
+export function BrandMark({ className = "", variant = "full" }: BrandMarkProps) {
+  const lightSrc =
+    variant === "full"
+      ? "/brand/resultados-full-light.png"
+      : "/brand/resultados-icon-light.svg";
+  const darkSrc =
+    variant === "full"
+      ? "/brand/resultados-full-dark.png"
+      : "/brand/resultados-icon-dark.svg";
+
   return (
-    <div className={["flex items-center gap-3", className].filter(Boolean).join(" ")}>
+    <span
+      role="img"
+      aria-label="Resultados S/A"
+      className={["inline-flex h-9 items-center", className].filter(Boolean).join(" ")}
+    >
       <img
-        src="/brand/resultados-icon-light.svg"
+        src={lightSrc}
         alt=""
         aria-hidden="true"
-        className="h-9 w-9 shrink-0 object-contain dark:hidden"
+        className="h-full w-auto object-contain dark:hidden"
       />
       <img
-        src="/brand/resultados-icon-dark.svg"
+        src={darkSrc}
         alt=""
         aria-hidden="true"
-        className="hidden h-9 w-9 shrink-0 object-contain dark:block"
+        className="hidden h-full w-auto object-contain dark:block"
       />
-      {!compact && (
-        <span className="font-display text-lg font-semibold tracking-[0.04em] text-foreground">
-          RESULTADOS S/A
-        </span>
-      )}
-    </div>
+    </span>
   );
 }
