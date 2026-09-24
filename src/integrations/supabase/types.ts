@@ -95,6 +95,89 @@ export type Database = {
           },
         ]
       }
+      balance_accounts: {
+        Row: {
+          active: boolean
+          balance_group: string
+          balance_subgroup: string | null
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          balance_group: string
+          balance_subgroup?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          balance_group?: string
+          balance_subgroup?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "balance_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      balance_manual_entries: {
+        Row: {
+          account_id: string
+          client_id: string
+          id: string
+          period: string
+          updated_at: string
+          updated_by: string | null
+          value: number
+        }
+        Insert: {
+          account_id: string
+          client_id: string
+          id?: string
+          period: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: number
+        }
+        Update: {
+          account_id?: string
+          client_id?: string
+          id?: string
+          period?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "balance_manual_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "balance_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "balance_manual_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       classification_audit: {
         Row: {
           became_rule: boolean
@@ -312,6 +395,7 @@ export type Database = {
           amount: number
           area: string | null
           balance_group: string | null
+          balance_subgroup: string | null
           behavior: Database["public"]["Enums"]["entry_behavior"]
           classification_source: string | null
           client_id: string
@@ -340,6 +424,7 @@ export type Database = {
           amount?: number
           area?: string | null
           balance_group?: string | null
+          balance_subgroup?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           classification_source?: string | null
           client_id: string
@@ -368,6 +453,7 @@ export type Database = {
           amount?: number
           area?: string | null
           balance_group?: string | null
+          balance_subgroup?: string | null
           behavior?: Database["public"]["Enums"]["entry_behavior"]
           classification_source?: string | null
           client_id?: string
