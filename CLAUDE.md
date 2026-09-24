@@ -166,22 +166,24 @@ funcionou" com outro caso não é confirmação suficiente.
 - **Grupo Erinho tem 294 lançamentos automáticos em julho/2026**, acima do
   limite de 200 por consulta — corte agora é visível via banner, mas
   paginação real continua pendente como melhoria futura, não bug.
-- **DRE do Bandrones mostra vazio no primeiro carregamento de um mês
-  específico** (reproduzido em agosto/2026), notado em 24/09/2026 no recheque
-  pós-deploy do filtro de período compartilhado. Autocorrige com qualquer
-  interação subsequente (navegação, clique). Não reproduz localmente
-  (hipótese: timing/latência específico de produção). Descartado com
-  evidência: (1) dessincronia entre `range` e `periodFilter.range` — logs de
-  produção confirmaram valores idênticos em toda renderização e no disparo
-  da query; (2) prefetch SSR com range desatualizado — rota `_authenticated`
-  tem `ssr: false`, não há `loader` nem dehydration, então não existe
-  resultado de servidor sendo hidratado. Servidor confirmado retornando dado
-  correto para a mesma consulta. Sintoma específico da DRE — Classificação,
-  mesmo hook `usePeriodFilter`, não apresenta o problema. Próxima hipótese a
-  testar: diferença entre como DRE deriva a tabela via `useMemo`/`buildDre` e
-  como Classificação renderiza direto do resultado da query — pode ser array
-  de dependência do `useMemo` não incluindo algo que só muda depois da
-  primeira interação.
+- ~~DRE do Bandrones mostra vazio no primeiro carregamento de um mês
+  específico~~ **Corrigido em 24/09/2026.** Causa real: `hasData` era
+  calculado só a partir de `dre.data` (`rows.length > 0`), sem considerar
+  `dre.isLoading` — enquanto a query ainda estava em voo, `dre.data` era
+  `undefined`, e a tela tratava isso como "sem lançamentos"/"indisponível",
+  idêntico ao resultado genuíno de um período vazio. Em produção, com
+  latência real de rede, isso aparecia como um flash de "vazio" no primeiro
+  carregamento; localmente a query resolve quase instantaneamente, por isso
+  nunca reproduziu. Duas hipóteses anteriores (dessincronia `range`/
+  `periodFilter.range`; prefetch SSR desatualizado) haviam sido descartadas
+  com evidência antes desta — nenhuma delas era a causa. Corrigido em
+  `dre.tsx` e `indicadores.tsx` (que usa a mesma `getDreData`): ambos agora
+  mostram um estado de carregamento explícito enquanto `isLoading` for
+  verdadeiro, e só tratam como "sem dados" quando `isLoading` for falso e
+  `rows.length` for zero. Confirmado com simulação de latência real (delay
+  de 2,5s injetado em `fetch` no browser + medição por polling de
+  timestamps), cobrindo carregando/resolvido × dado real/vazio genuíno, em
+  Bandrones e Grupo Erinho.
 
 ## Ambiente / infraestrutura
 
