@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getClientDataRange, getDreData } from "@/lib/dre.functions";
+import { getDreData } from "@/lib/dre.functions";
 import {
   brl,
   buildDre,
@@ -24,6 +24,8 @@ import {
   type DreRow,
   type Nature,
 } from "@/lib/finance";
+import { useRangeFilter, type RangeShortcut } from "@/hooks/use-range-filter";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -44,77 +46,20 @@ export const Route = createFileRoute("/_authenticated/clientes/$clientId/indicad
   component: IndicatorsPage,
 });
 
-type DateRange = { from: string; to: string };
+const SHORTCUT_LABEL: Record<RangeShortcut, string> = {
+  "closed-month": "Mês fechado",
+  "3m": "3 meses",
+  "6m": "6 meses",
+  year: "Ano",
+};
 
-function defaultRange(): DateRange {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-}
-
-function validRange(value: unknown): value is DateRange {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as DateRange;
-  return /^\d{4}-\d{2}-\d{2}$/.test(candidate.from) && /^\d{4}-\d{2}-\d{2}$/.test(candidate.to);
-}
+const SHORTCUTS: RangeShortcut[] = ["closed-month", "3m", "6m", "year"];
 
 function IndicatorsPage() {
   const { clientId } = Route.useParams();
   const fetchDre = useServerFn(getDreData);
-  const fetchDataRange = useServerFn(getClientDataRange);
-  const [range, setRange] = useState<DateRange>(defaultRange);
-  const [readyClientId, setReadyClientId] = useState<string | null>(null);
-
-  const dataRange = useQuery({
-    queryKey: ["dre-data-range", clientId],
-    queryFn: () => fetchDataRange({ data: { clientId } }),
-  });
-
-  useEffect(() => {
-    if (readyClientId === clientId || dataRange.isLoading) return;
-
-    const params = new URLSearchParams(window.location.search);
-    const urlRange = { from: params.get("from") ?? "", to: params.get("to") ?? "" };
-    if (validRange(urlRange)) {
-      setRange(urlRange);
-      setReadyClientId(clientId);
-      return;
-    }
-
-    try {
-      // A DRE e os Indicadores compartilham a mesma preferência de período por cliente.
-      const saved = window.localStorage.getItem(`dre-range:${clientId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved) as unknown;
-        if (validRange(parsed)) {
-          setRange(parsed);
-          setReadyClientId(clientId);
-          return;
-        }
-      }
-    } catch {
-      // Se a persistência local falhar, usamos o período real disponível ou o padrão.
-    }
-
-    setRange(dataRange.data ?? defaultRange());
-    setReadyClientId(clientId);
-  }, [clientId, dataRange.data, dataRange.isLoading, readyClientId]);
-
-  useEffect(() => {
-    if (readyClientId !== clientId) return;
-
-    try {
-      window.localStorage.setItem(`dre-range:${clientId}`, JSON.stringify(range));
-    } catch {
-      // Persistência local é conveniência e não impede o carregamento dos indicadores.
-    }
-
-    const url = new URL(window.location.href);
-    url.searchParams.set("from", range.from);
-    url.searchParams.set("to", range.to);
-    window.history.replaceState(window.history.state, "", url.toString());
-  }, [clientId, range, readyClientId]);
+  const rangeFilter = useRangeFilter(clientId);
+  const range = rangeFilter.range;
 
   const dre = useQuery({
     queryKey: ["dre", clientId, range.from, range.to, "all"],
@@ -161,24 +106,41 @@ function IndicatorsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-card p-5">
-        <div className="space-y-2">
-          <Label htmlFor="from">De</Label>
-          <Input
-            id="from"
-            type="date"
-            value={range.from}
-            onChange={(e) => setRange({ ...range, from: e.target.value })}
-          />
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4 mb-4">
+          <span className="mr-1 font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+            Atalho de período
+          </span>
+          {SHORTCUTS.map((shortcut) => (
+            <Button
+              key={shortcut}
+              variant={rangeFilter.shortcut === shortcut ? "default" : "outline"}
+              size="sm"
+              onClick={() => rangeFilter.setShortcut(shortcut)}
+            >
+              {SHORTCUT_LABEL[shortcut]}
+            </Button>
+          ))}
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="to">Até</Label>
-          <Input
-            id="to"
-            type="date"
-            value={range.to}
-            onChange={(e) => setRange({ ...range, to: e.target.value })}
-          />
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="from">De</Label>
+            <Input
+              id="from"
+              type="date"
+              value={range.from}
+              onChange={(e) => rangeFilter.setRange({ ...range, from: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="to">Até</Label>
+            <Input
+              id="to"
+              type="date"
+              value={range.to}
+              onChange={(e) => rangeFilter.setRange({ ...range, to: e.target.value })}
+            />
+          </div>
         </div>
       </div>
 
