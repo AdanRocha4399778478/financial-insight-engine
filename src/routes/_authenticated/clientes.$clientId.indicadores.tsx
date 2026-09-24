@@ -67,6 +67,7 @@ function IndicatorsPage() {
       fetchDre({ data: { clientId, from: range.from, to: range.to, dimension: null } }),
   });
 
+  const isLoading = dre.isLoading;
   const rows = dre.data?.rows ?? [];
   const hasData = rows.length > 0;
 
@@ -144,86 +145,94 @@ function IndicatorsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {indicators.map((indicator) => (
-          <div key={indicator.key} className="rounded-lg border border-border bg-card p-6">
-            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-              {indicator.label}
-            </p>
-            <p className="mt-3 font-display text-2xl font-bold tracking-tight">
-              {indicator.value === null
-                ? "Indisponível"
-                : indicator.format === "currency"
-                  ? brl(indicator.value)
-                  : pct(indicator.value)}
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {indicator.reason ?? indicator.hint ?? ""}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {monthly.length > 1 && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="font-display text-sm font-semibold">Receita líquida x EBITDA</h2>
-            <div className="mt-6 h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="mes" stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={70} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                    }}
-                    formatter={(value: number) => brl(value)}
-                  />
-                  <Bar dataKey="receita" fill="var(--color-muted-foreground)" name="Receita líquida" />
-                  <Bar dataKey="ebitda" fill="var(--color-primary)" name="EBITDA" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="font-display text-sm font-semibold">Margem líquida (%)</h2>
-            <div className="mt-6 h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="mes" stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={50} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                    }}
-                    formatter={(value: number) => pct(value)}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="margem"
-                    stroke="var(--color-primary)"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Margem líquida"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!hasData && (
+      {isLoading ? (
         <div className="rounded-lg border border-dashed border-border p-16 text-center text-sm text-muted-foreground">
-          Sem base validada no período — importe e classifique lançamentos para ver os indicadores.
+          Carregando indicadores...
         </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {indicators.map((indicator) => (
+              <div key={indicator.key} className="rounded-lg border border-border bg-card p-6">
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                  {indicator.label}
+                </p>
+                <p className="mt-3 font-display text-2xl font-bold tracking-tight">
+                  {indicator.value === null
+                    ? "Indisponível"
+                    : indicator.format === "currency"
+                      ? brl(indicator.value)
+                      : pct(indicator.value)}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {indicator.reason ?? indicator.hint ?? ""}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {monthly.length > 1 && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-lg border border-border bg-card p-6">
+                <h2 className="font-display text-sm font-semibold">Receita líquida x EBITDA</h2>
+                <div className="mt-6 h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthly}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="mes" stroke="var(--color-muted-foreground)" fontSize={12} />
+                      <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={70} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--color-card)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                        }}
+                        formatter={(value: number) => brl(value)}
+                      />
+                      <Bar dataKey="receita" fill="var(--color-muted-foreground)" name="Receita líquida" />
+                      <Bar dataKey="ebitda" fill="var(--color-primary)" name="EBITDA" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-6">
+                <h2 className="font-display text-sm font-semibold">Margem líquida (%)</h2>
+                <div className="mt-6 h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={monthly}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="mes" stroke="var(--color-muted-foreground)" fontSize={12} />
+                      <YAxis stroke="var(--color-muted-foreground)" fontSize={11} width={50} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--color-card)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                        }}
+                        formatter={(value: number) => pct(value)}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="margem"
+                        stroke="var(--color-primary)"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Margem líquida"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!hasData && (
+            <div className="rounded-lg border border-dashed border-border p-16 text-center text-sm text-muted-foreground">
+              Sem base validada no período — importe e classifique lançamentos para ver os indicadores.
+            </div>
+          )}
+        </>
       )}
     </div>
   );

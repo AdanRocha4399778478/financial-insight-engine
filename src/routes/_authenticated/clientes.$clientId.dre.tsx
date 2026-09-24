@@ -143,10 +143,12 @@ function DrePage() {
     return buildDre(rows);
   }, [dre.data]);
 
+  const isLoading = dre.isLoading;
   const hasData = (dre.data?.rows.length ?? 0) > 0;
   const latestImport = imports.data?.find((imp) => imp.valid_rows > 0);
   const hasDataOutsideRange = Boolean(
-    !hasData &&
+    !isLoading &&
+      !hasData &&
       dataRange.data &&
       (range.from > dataRange.data.to || range.to < dataRange.data.from || range.from > dataRange.data.from || range.to < dataRange.data.to),
   );
@@ -341,7 +343,11 @@ function DrePage() {
   </div>
 )}
 
-      {!hasData ? (
+      {isLoading ? (
+        <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+          Carregando demonstrativo...
+        </div>
+      ) : !hasData ? (
         <div className="rounded-lg border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
           <p>Sem lançamentos classificados no período selecionado.</p>
           {hasDataOutsideRange && dataRange.data && (
