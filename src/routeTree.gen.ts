@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedClientesIndexRouteImport } from './routes/_authenticated/clientes.index'
 import { Route as AuthenticatedClientesClientIdRouteImport } from './routes/_authenticated/clientes.$clientId'
 import { Route as AuthenticatedClientesClientIdIndexRouteImport } from './routes/_authenticated/clientes.$clientId.index'
+import { Route as AuthenticatedClientesClientIdBalancoRouteImport } from './routes/_authenticated/clientes.$clientId.balanco'
 import { Route as AuthenticatedClientesClientIdClassificacaoRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao'
 import { Route as AuthenticatedClientesClientIdClassificacaoPatrimonialRouteImport } from './routes/_authenticated/clientes.$clientId.classificacao-patrimonial'
 import { Route as AuthenticatedClientesClientIdContasRouteImport } from './routes/_authenticated/clientes.$clientId.contas'
@@ -54,6 +55,12 @@ const AuthenticatedClientesClientIdIndexRoute =
   AuthenticatedClientesClientIdIndexRouteImport.update({
     id: '/',
     path: '/',
+    getParentRoute: () => AuthenticatedClientesClientIdRoute,
+  } as any)
+const AuthenticatedClientesClientIdBalancoRoute =
+  AuthenticatedClientesClientIdBalancoRouteImport.update({
+    id: '/balanco',
+    path: '/balanco',
     getParentRoute: () => AuthenticatedClientesClientIdRoute,
   } as any)
 const AuthenticatedClientesClientIdClassificacaoRoute =
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
   '/clientes/': typeof AuthenticatedClientesIndexRoute
+  '/clientes/$clientId/balanco': typeof AuthenticatedClientesClientIdBalancoRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
@@ -124,6 +132,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/clientes': typeof AuthenticatedClientesIndexRoute
+  '/clientes/$clientId/balanco': typeof AuthenticatedClientesClientIdBalancoRoute
   '/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/clientes/$clientId': typeof AuthenticatedClientesClientIdRouteWithChildren
   '/_authenticated/clientes/': typeof AuthenticatedClientesIndexRoute
+  '/_authenticated/clientes/$clientId/balanco': typeof AuthenticatedClientesClientIdBalancoRoute
   '/_authenticated/clientes/$clientId/classificacao': typeof AuthenticatedClientesClientIdClassificacaoRoute
   '/_authenticated/clientes/$clientId/classificacao-patrimonial': typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   '/_authenticated/clientes/$clientId/contas': typeof AuthenticatedClientesClientIdContasRoute
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clientes/$clientId'
     | '/clientes/'
+    | '/clientes/$clientId/balanco'
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/classificacao-patrimonial'
     | '/clientes/$clientId/contas'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/clientes'
+    | '/clientes/$clientId/balanco'
     | '/clientes/$clientId/classificacao'
     | '/clientes/$clientId/classificacao-patrimonial'
     | '/clientes/$clientId/contas'
@@ -188,6 +200,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/clientes/$clientId'
     | '/_authenticated/clientes/'
+    | '/_authenticated/clientes/$clientId/balanco'
     | '/_authenticated/clientes/$clientId/classificacao'
     | '/_authenticated/clientes/$clientId/classificacao-patrimonial'
     | '/_authenticated/clientes/$clientId/contas'
@@ -247,6 +260,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/clientes/$clientId/'
       preLoaderRoute: typeof AuthenticatedClientesClientIdIndexRouteImport
+      parentRoute: typeof AuthenticatedClientesClientIdRoute
+    }
+    '/_authenticated/clientes/$clientId/balanco': {
+      id: '/_authenticated/clientes/$clientId/balanco'
+      path: '/balanco'
+      fullPath: '/clientes/$clientId/balanco'
+      preLoaderRoute: typeof AuthenticatedClientesClientIdBalancoRouteImport
       parentRoute: typeof AuthenticatedClientesClientIdRoute
     }
     '/_authenticated/clientes/$clientId/classificacao': {
@@ -309,6 +329,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedClientesClientIdRouteChildren {
+  AuthenticatedClientesClientIdBalancoRoute: typeof AuthenticatedClientesClientIdBalancoRoute
   AuthenticatedClientesClientIdClassificacaoRoute: typeof AuthenticatedClientesClientIdClassificacaoRoute
   AuthenticatedClientesClientIdClassificacaoPatrimonialRoute: typeof AuthenticatedClientesClientIdClassificacaoPatrimonialRoute
   AuthenticatedClientesClientIdContasRoute: typeof AuthenticatedClientesClientIdContasRoute
@@ -322,6 +343,8 @@ interface AuthenticatedClientesClientIdRouteChildren {
 
 const AuthenticatedClientesClientIdRouteChildren: AuthenticatedClientesClientIdRouteChildren =
   {
+    AuthenticatedClientesClientIdBalancoRoute:
+      AuthenticatedClientesClientIdBalancoRoute,
     AuthenticatedClientesClientIdClassificacaoRoute:
       AuthenticatedClientesClientIdClassificacaoRoute,
     AuthenticatedClientesClientIdClassificacaoPatrimonialRoute:

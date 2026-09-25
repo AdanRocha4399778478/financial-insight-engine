@@ -15,6 +15,7 @@ const tabs: { to: string; label: string; exact?: boolean }[] = [
   { to: "/clientes/$clientId/classificacao", label: "Classificação" },
   { to: "/clientes/$clientId/contas", label: "Contas" },
   { to: "/clientes/$clientId/dre", label: "DRE" },
+  { to: "/clientes/$clientId/balanco", label: "Balanço" },
   { to: "/clientes/$clientId/indicadores", label: "Indicadores" },
   { to: "/clientes/$clientId/governanca", label: "Governança" },
 ];

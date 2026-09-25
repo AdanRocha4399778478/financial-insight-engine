@@ -21,8 +21,8 @@ export interface UsePeriodFilterResult {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-function storageKey(clientId: string): string {
-  return `period-filter:${clientId}`;
+function storageKey(clientId: string, namespace: string): string {
+  return `${namespace}:${clientId}`;
 }
 
 export function isValidPeriod(value: unknown): value is Period {
@@ -75,9 +75,9 @@ export function parsePeriodFromSearchParams(params: URLSearchParams): Period | n
   return isValidPeriod(candidate) ? candidate : null;
 }
 
-export function readStoredPeriod(clientId: string): Period | null {
+export function readStoredPeriod(clientId: string, namespace: string = "period-filter"): Period | null {
   try {
-    const raw = window.localStorage.getItem(storageKey(clientId));
+    const raw = window.localStorage.getItem(storageKey(clientId, namespace));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     return isValidPeriod(parsed) ? parsed : null;
@@ -86,9 +86,13 @@ export function readStoredPeriod(clientId: string): Period | null {
   }
 }
 
-export function writeStoredPeriod(clientId: string, period: Period): void {
+export function writeStoredPeriod(
+  clientId: string,
+  period: Period,
+  namespace: string = "period-filter",
+): void {
   try {
-    window.localStorage.setItem(storageKey(clientId), JSON.stringify(period));
+    window.localStorage.setItem(storageKey(clientId, namespace), JSON.stringify(period));
   } catch {
     // Persistência local é conveniência, não requisito.
   }
@@ -100,7 +104,10 @@ export function writeStoredPeriod(clientId: string, period: Period): void {
  * corrente. Ainda não é usado por nenhuma tela — Fase 1 (fundação) do plano de
  * unificação de filtro de período.
  */
-export function usePeriodFilter(clientId: string): UsePeriodFilterResult {
+export function usePeriodFilter(
+  clientId: string,
+  storageNamespace: string = "period-filter",
+): UsePeriodFilterResult {
   const [period, setPeriod] = useState<Period>(() => closedMonth());
   const [readyClientId, setReadyClientId] = useState<string | null>(null);
 
@@ -115,7 +122,7 @@ export function usePeriodFilter(clientId: string): UsePeriodFilterResult {
       return;
     }
 
-    const stored = readStoredPeriod(clientId);
+    const stored = readStoredPeriod(clientId, storageNamespace);
     if (stored) {
       setPeriod(stored);
       setReadyClientId(clientId);
@@ -124,19 +131,19 @@ export function usePeriodFilter(clientId: string): UsePeriodFilterResult {
 
     setPeriod(closedMonth());
     setReadyClientId(clientId);
-  }, [clientId, readyClientId]);
+  }, [clientId, readyClientId, storageNamespace]);
 
   useEffect(() => {
     if (readyClientId !== clientId) return;
 
-    writeStoredPeriod(clientId, period);
+    writeStoredPeriod(clientId, period, storageNamespace);
 
     const url = new URL(window.location.href);
     const { ano, mes } = periodToSearchParams(period);
     url.searchParams.set("ano", ano);
     url.searchParams.set("mes", mes);
     window.history.replaceState(window.history.state, "", url.toString());
-  }, [clientId, period, readyClientId]);
+  }, [clientId, period, readyClientId, storageNamespace]);
 
   const range = useMemo(() => periodToRange(period), [period]);
 
