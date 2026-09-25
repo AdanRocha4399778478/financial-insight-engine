@@ -184,6 +184,16 @@ funcionou" com outro caso não é confirmação suficiente.
   de 2,5s injetado em `fetch` no browser + medição por polling de
   timestamps), cobrindo carregando/resolvido × dado real/vazio genuíno, em
   Bandrones e Grupo Erinho.
+- **[Balanço Patrimonial, pendente de implementação]** Schema criado em
+  24/09/2026 (`balance_accounts`, `balance_manual_entries`,
+  `entries.balance_subgroup`) — ver migration
+  `20260924181803_balanco-patrimonial-schema.sql`. Regra para validar no
+  gate 5 quando a lógica de servidor for implementada:
+  `balance_manual_entries.client_id` deve sempre ser derivado do
+  `client_id` da `balance_accounts` referenciada por `account_id`, nunca
+  aceito solto do formulário/payload do cliente — evita um usuário
+  autorizado num cliente escrever `client_id` de outro cliente numa
+  linha cujo `account_id` não bate.
 
 ## Ambiente / infraestrutura
 
