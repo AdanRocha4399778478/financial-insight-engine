@@ -107,7 +107,26 @@ export interface DreResult {
   byAccount: Record<string, { account: string; nature: Nature; total: number; count: number }>;
 }
 
-const abs = (v: number) => Math.abs(Number(v) || 0);
+const DESPESA_LIKE_NATURES: ReadonlySet<Nature> = new Set([
+  "deducao",
+  "custo",
+  "despesa",
+  "despesa_financeira",
+  "outra_despesa",
+]);
+
+/**
+ * Impacto assinado de um lançamento na DRE. Cada nature tem polaridade fixa
+ * (despesa-like reduz caixa no caso normal, receita-like aumenta); o sinal
+ * de `amount` decide se o evento é normal ou uma reversão dentro dessa
+ * polaridade, então uma devolução/estorno reduz o bucket líquido em vez de
+ * somar ao módulo como se fosse um evento normal do mesmo tipo.
+ */
+export function getDreImpact(amount: number, nature: Nature): number {
+  const value = Number(amount) || 0;
+  if (nature === "transferencia" || nature === "excluido" || nature === "nao_definido") return 0;
+  return (DESPESA_LIKE_NATURES.has(nature) ? -value : value) || 0;
+}
 
 export function buildDre(rows: DreRow[]): DreResult {
   const r: DreResult = {
@@ -140,7 +159,7 @@ export function buildDre(rows: DreRow[]): DreResult {
     if (row.excluded_from_dre) continue;
     if (row.nature === "transferencia" || row.nature === "excluido" || row.nature === "nao_definido")
       continue;
-    const v = abs(row.amount);
+    const v = getDreImpact(row.amount, row.nature);
     const key = `${row.nature}::${row.account ?? "Sem conta"}`;
     const bucket = r.byAccount[key] ?? {
       account: row.account ?? "Sem conta",

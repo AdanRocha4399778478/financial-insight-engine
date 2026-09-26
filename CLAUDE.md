@@ -194,6 +194,42 @@ funcionou" com outro caso não é confirmação suficiente.
   aceito solto do formulário/payload do cliente — evita um usuário
   autorizado num cliente escrever `client_id` de outro cliente numa
   linha cujo `account_id` não bate.
+- ~~41 lançamentos com sinal "invertido" (custo+, despesa+, receita_bruta−,
+  receita_financeira−) no Grupo Erinho, investigados e NÃO são reversão~~
+  **Reclassificado em 25-26/09/2026**, migration
+  `20260926023216_reclassificacao-grupo-erinho-sinal-invertido.sql`. Investigação
+  aprofundada (por CNPJ/CPF na `description`, não por texto do nome) revelou: 25
+  lançamentos "ERINHO AUTO PECAS" (CNPJ 20678494000175) eram transferência
+  interna confirmada → `nature='transferencia'` (exclui da DRE); 1 lançamento
+  "REI DOS ENGATES" era custo real com conta/nature invertidos → `nature='custo'`,
+  mantida conta CMV; 3 lançamentos de Lucas Gabriel Nogueira e os 4 lançamentos
+  positivos (não os 7 negativos, que são CMV normal) de Lucas Gabriel Marques
+  tinham classificação inconsistente/incerta → movidos para `status='pendente'`
+  (revisão humana pendente); 2 lançamentos de Stephanny Myllene Carr, idem →
+  `status='pendente'`; 5 lançamentos "TARIFA LIBERACAO CREDITO" (incl. variação
+  "C60332668") estavam classificados como `receita_financeira` por uma regra
+  genérica que capturava antes da regra específica e correta → reclassificados
+  para `despesa_financeira`, conta "Antecipação de Recebíveis - Tarifas" (mesma
+  regra já existente e correta no sistema, id
+  `621e605f-7264-4eb8-8049-fe565f4ad4bc`). Os 3 lançamentos de Agiliza Transport
+  (CNPJ 59766494000162) são reversão legítima confirmada de um fornecedor real —
+  não foram tocados, ficam como o único caso de sinal "invertido" remanescente
+  por design. Verificado ao vivo na DRE (não só SQL) de fevereiro e julho/2026:
+  todos os totais batem exatamente com a reconciliação linha-a-linha feita antes
+  da migration; Bandrones confirmado intacto nos 6 meses com dados.
+- **Conflito de precedência de regras de classificação**, encontrado em
+  25/09/2026 durante a investigação acima: o pattern genérico "LIBERACAO
+  CREDITO" (regra ativa, `nature=receita_financeira`, conta "Antecipação de
+  Recebíveis") capturava lançamentos de tarifa bancária antes da regra mais
+  específica e correta "TARIFA LIBERACAO CREDITO" (`nature=despesa_financeira`,
+  conta "Antecipação de Recebíveis - Tarifas", id
+  `621e605f-7264-4eb8-8049-fe565f4ad4bc`, também ativa) conseguir aplicar. Os 5
+  casos históricos já existentes foram corrigidos por reclassificação direta
+  (ver nota acima), mas a causa raiz — o motor de matching em `classify.ts` não
+  prioriza regras mais específicas sobre regras mais genéricas — não foi
+  corrigida. Pode se repetir para lançamentos futuros com o mesmo padrão de
+  texto. Requer revisão do critério de prioridade/especificidade no motor de
+  regras antes que isso vire um problema recorrente.
 
 ## Ambiente / infraestrutura
 
